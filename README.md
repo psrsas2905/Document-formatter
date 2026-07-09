@@ -3,7 +3,8 @@
 Turn a raw, inconsistently-formatted Word draft into a **publish-ready document**
 that matches your organization's standard template — in minutes instead of hours.
 
-> **Status:** early / work-in-progress. Building the deterministic core first.
+> **Status:** v1 pipeline complete — deterministic core, TOC/captions/page
+> numbers, tagged-PDF export, QA report, and the optional local-AI classifier.
 
 ## Why
 
@@ -51,12 +52,25 @@ docformat format samples/input_messy.docx \
 
 Outputs a styled `.docx`, a tagged `.pdf`, and `qa_report.md`.
 
+Use **your organization's brand template** (logo, colors, page setup — all
+preserved) by pointing at it directly, no profile editing needed:
+
+```bash
+docformat format draft.docx -t config/template_profile.example.yaml \
+  --template-docx path/to/your_brand_template.docx --out out/
+```
+
+Add `--ai` to let a locally installed [Ollama](https://ollama.com/) model
+re-judge the blocks the heuristics were unsure about. If Ollama isn't running,
+the flag is a no-op — the deterministic result stands. `--no-pdf` skips the
+LibreOffice export.
+
 ## Roadmap
 
-- [ ] Deterministic core: ingest → classify → apply → export
-- [ ] Auto TOC / List of Figures, headers & page numbers
-- [ ] QA report
-- [ ] Optional offline AI classifier (Ollama) behind `--ai`
+- [x] Deterministic core: ingest → classify → apply → export
+- [x] Auto TOC / List of Figures, headers & page numbers
+- [x] QA report
+- [x] Optional offline AI classifier (Ollama) behind `--ai`
 - [ ] Standalone executable (PyInstaller)
 - [ ] Simple GUI for non-technical writers
 

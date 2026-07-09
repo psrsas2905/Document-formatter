@@ -65,14 +65,35 @@ re-judge the blocks the heuristics were unsure about. If Ollama isn't running,
 the flag is a no-op — the deterministic result stands. `--no-pdf` skips the
 LibreOffice export.
 
+### GUI (for non-technical writers)
+
+```bash
+docformat gui
+```
+
+Opens a local web app at `http://127.0.0.1:8765` (stdlib server, localhost
+only — nothing ever leaves the machine): drag in the draft, optionally drag in
+your organization's brand template, click **Format document**, download the
+results, and see at a glance which blocks need a human look.
+
+### Standalone executable
+
+```bash
+bash scripts/build_exe.sh   # -> dist/docformat (single file)
+```
+
+The executable bundles Python, python-docx, the example profile and the demo
+template; only LibreOffice is still needed on the target machine for PDF
+export. Build on each OS you ship to (PyInstaller doesn't cross-compile).
+
 ## Roadmap
 
 - [x] Deterministic core: ingest → classify → apply → export
 - [x] Auto TOC / List of Figures, headers & page numbers
 - [x] QA report
 - [x] Optional offline AI classifier (Ollama) behind `--ai`
-- [ ] Standalone executable (PyInstaller)
-- [ ] Simple GUI for non-technical writers
+- [x] Standalone executable (PyInstaller)
+- [x] Local web GUI for non-technical writers
 
 ## Contributing
 

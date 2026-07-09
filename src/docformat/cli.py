@@ -28,6 +28,13 @@ app = typer.Typer(help="Turn raw Word drafts into publish-ready, template-confor
 def format(
     input: Path = typer.Argument(..., exists=True, help="Source .docx to format."),
     template: Path = typer.Option(..., "--template", "-t", help="Path to template_profile.yaml."),
+    template_docx: Path | None = typer.Option(
+        None,
+        "--template-docx",
+        exists=True,
+        help="Your organization's brand template (.docx/.dotx, logo and all); "
+        "overrides the profile's template_file.",
+    ),
     out: Path = typer.Option(Path("out"), "--out", "-o", help="Output directory."),
     ai: bool = typer.Option(False, "--ai", help="Use optional local-AI classifier (offline)."),
     pdf: bool = typer.Option(True, "--pdf/--no-pdf", help="Also export a PDF."),
@@ -35,7 +42,9 @@ def format(
     """Run the full formatting pipeline on INPUT."""
     out.mkdir(parents=True, exist_ok=True)
     profile = load_profile(template)
-    typer.echo(f"Template profile: {profile.name}")
+    if template_docx is not None:
+        profile.template_file = str(template_docx)
+    typer.echo(f"Template profile: {profile.name} (template: {profile.template_file})")
 
     doc = _ingest.ingest(input)
     doc = _classify_ai.classify_ai(doc) if ai else _classify.classify(doc)

@@ -28,7 +28,7 @@ from . import export as _export
 from . import ingest as _ingest
 from . import qa as _qa
 from .classify import CONFIDENCE_THRESHOLD
-from .template import load_profile
+from .template import apply_field_values, load_profile
 
 _ASSET = Path(__file__).parent / "assets" / "gui.html"
 
@@ -115,6 +115,13 @@ class _Handler(BaseHTTPRequestHandler):
             tpl_path.write_bytes(template_upload[1])
             profile.template_file = str(tpl_path)
 
+        field_values = fields.get("fields")
+        if field_values and field_values[1]:
+            parsed = json.loads(field_values[1].decode("utf-8"))
+            if not isinstance(parsed, dict):
+                raise ValueError("'fields' must be a JSON object of name -> value.")
+            apply_field_values(profile, {str(k): str(v) for k, v in parsed.items()})
+
         use_ai = fields.get("ai", (None, b"0"))[1] == b"1"
         want_pdf = fields.get("pdf", (None, b"1"))[1] == b"1"
 
@@ -144,6 +151,7 @@ class _Handler(BaseHTTPRequestHandler):
             "qa": f"/files/{sid}/{qa_path.name}",
             "total_blocks": len(doc.blocks),
             "review": review,
+            "notes": doc.notes,
         }
 
     # -- plumbing ---------------------------------------------------------

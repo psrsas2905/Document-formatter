@@ -60,6 +60,14 @@ docformat format draft.docx -t config/template_profile.example.yaml \
   --template-docx path/to/your_brand_template.docx --out out/
 ```
 
+If the template has its own placeholders (cover page, headers), fill them per
+document with `--set` (anything left unfilled is flagged in the QA report):
+
+```bash
+docformat format draft.docx -t config/template_profile.redlotus.yaml \
+  --set "Client Name=Acme Corporation" --set "Project No.=RL-2026-042" --out out/
+```
+
 Add `--ai` to let a locally installed [Ollama](https://ollama.com/) model
 re-judge the blocks the heuristics were unsure about. If Ollama isn't running,
 the flag is a no-op — the deterministic result stands. `--no-pdf` skips the

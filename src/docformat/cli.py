@@ -19,7 +19,17 @@ from . import elements as _elements
 from . import export as _export
 from . import ingest as _ingest
 from . import qa as _qa
-from .template import load_profile
+from .template import apply_field_values, load_profile
+
+
+def _parse_set_options(pairs: list[str]) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for pair in pairs:
+        key, sep, value = pair.partition("=")
+        if not sep or not key.strip():
+            raise typer.BadParameter(f'--set expects "Name=Value", got {pair!r}')
+        values[key.strip()] = value.strip()
+    return values
 
 app = typer.Typer(help="Turn raw Word drafts into publish-ready, template-conformant documents.")
 
@@ -41,6 +51,13 @@ def format(
         "overrides the profile's template_file.",
     ),
     out: Path = typer.Option(Path("out"), "--out", "-o", help="Output directory."),
+    set_field: list[str] = typer.Option(
+        [],
+        "--set",
+        "-s",
+        help='Fill a template placeholder for this document, e.g. '
+        '--set "Client Name=Acme Corp" (repeatable; matches [Client Name] in the template).',
+    ),
     ai: bool = typer.Option(False, "--ai", help="Use optional local-AI classifier (offline)."),
     pdf: bool = typer.Option(True, "--pdf/--no-pdf", help="Also export a PDF."),
 ) -> None:
@@ -49,6 +66,7 @@ def format(
     profile = load_profile(template)
     if template_docx is not None:
         profile.template_file = str(template_docx)
+    apply_field_values(profile, _parse_set_options(set_field))
     typer.echo(f"Template profile: {profile.name} (template: {profile.template_file})")
 
     doc = _ingest.ingest(input)

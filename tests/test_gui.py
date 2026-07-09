@@ -83,3 +83,29 @@ def test_download_path_traversal_blocked(gui_server):
             raise AssertionError("expected HTTP 404")
         except urllib.error.HTTPError as e:
             assert e.code == 404
+
+
+def test_document_fields_fill_placeholders(tmp_path):
+    """Per-document fields sent by the GUI fill cover placeholders."""
+    server = make_server(Path("config/template_profile.redlotus.yaml"), port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_port}"
+    try:
+        body, ctype = _multipart(
+            {
+                "source": ("input_messy.docx", Path("samples/input_messy.docx").read_bytes()),
+                "fields": (None, json.dumps({"Client Name": "Acme Corp",
+                                             "Project No.": "RL-42"}).encode()),
+                "pdf": (None, b"0"),
+            }
+        )
+        req = urllib.request.Request(
+            f"{base}/format", data=body, headers={"Content-Type": ctype}
+        )
+        data = json.load(urllib.request.urlopen(req))
+        assert not any("[Client Name]" in n for n in data["notes"])
+        assert not any("[Project No.]" in n for n in data["notes"])
+        assert any("[XXXX]" in n for n in data["notes"])  # deliberately unfilled
+    finally:
+        server.shutdown()

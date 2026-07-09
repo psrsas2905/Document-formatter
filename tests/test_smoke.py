@@ -147,3 +147,13 @@ def test_export_pdf(tmp_path):
     ).stdout
     assert "Table of Contents" in text
     assert "Overview" in text.split("Table of Contents")[1][:600]  # TOC populated
+
+
+def test_apply_field_values():
+    from docformat.template import apply_field_values, load_profile
+
+    profile = load_profile("config/template_profile.redlotus.yaml")
+    apply_field_values(profile, {"Client Name": "Acme", "[Custom]": "x"})
+    assert profile.raw["replace"]["[Client Name]"] == "Acme"
+    assert profile.raw["replace"]["[Custom]"] == "x"
+    assert profile.raw["replace"]["[Document Title]"] == "{doc_title}"  # untouched

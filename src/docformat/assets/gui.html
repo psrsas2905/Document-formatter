@@ -98,6 +98,29 @@
   th { color: var(--muted); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: .4px; }
   td.conf { font-variant-numeric: tabular-nums; }
   .qa-note { font-size: 13px; color: var(--muted); margin-top: 10px; }
+  .fields-hint { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
+  .fields-hint code { background: #eef2f6; padding: 1px 5px; border-radius: 5px; font-size: 12px; }
+  .field-row { display: flex; gap: 10px; margin-bottom: 8px; }
+  .field-row input {
+    border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; font: inherit;
+    font-size: 14px; color: var(--ink); background: #fafcfe;
+  }
+  .field-row input:focus { outline: 2px solid var(--brand); outline-offset: -1px; }
+  .field-row .fkey { flex: 2; }
+  .field-row .fval { flex: 3; }
+  .field-row .rm {
+    border: 1px solid var(--line); background: #fafcfe; border-radius: 8px; width: 38px;
+    color: var(--muted); font-size: 17px; cursor: pointer;
+  }
+  .field-row .rm:hover { color: var(--err); border-color: var(--err); }
+  button.ghost {
+    border: 1px dashed #b9c6d3; background: none; color: var(--brand-dark); border-radius: 8px;
+    padding: 7px 14px; font: inherit; font-size: 13.5px; cursor: pointer;
+  }
+  button.ghost:hover { border-color: var(--brand); background: #eef4fa; }
+  .warnings { margin: 0 0 14px; padding: 12px 14px 12px 30px; background: #fdf3e7;
+              border-radius: 10px; font-size: 13.5px; color: var(--warn); }
+  .warnings li { margin: 3px 0; }
   footer { text-align: center; color: var(--muted); font-size: 12.5px; padding: 10px 0 30px; }
 </style>
 </head>
@@ -137,6 +160,13 @@
       </div>
     </div>
 
+    <h2 style="margin-top:20px">Document fields <span style="font-weight:400;color:var(--muted)">(optional)</span></h2>
+    <p class="fields-hint">Fill your template's placeholders for this document — e.g. field
+    <em>Client Name</em> fills <code>[Client Name]</code> on the cover page. Unfilled
+    placeholders are listed in the QA report.</p>
+    <div id="fields"></div>
+    <button type="button" class="ghost" id="add-field">+ Add field</button>
+
     <div class="row">
       <label class="check"><input type="checkbox" id="opt-pdf" checked> Export tagged PDF</label>
       <label class="check"><input type="checkbox" id="opt-ai"> Use local AI assist (Ollama)</label>
@@ -151,6 +181,7 @@
     <h2 style="display:flex;justify-content:space-between;align-items:center">
       Results <span id="qa-badge" class="badge ok"></span>
     </h2>
+    <ul class="warnings" id="warnings" style="display:none"></ul>
     <div class="downloads" id="downloads"></div>
     <div id="qa-section">
       <h2 style="margin-top:18px">Needs your review</h2>
@@ -195,6 +226,30 @@
     }
   });
 
+  function addFieldRow(key, val) {
+    const row = document.createElement("div");
+    row.className = "field-row";
+    row.innerHTML = '<input class="fkey" placeholder="Field name — e.g. Client Name">' +
+                    '<input class="fval" placeholder="Value for this document">' +
+                    '<button type="button" class="rm" title="Remove">×</button>';
+    if (key) row.querySelector(".fkey").value = key;
+    if (val) row.querySelector(".fval").value = val;
+    row.querySelector(".rm").addEventListener("click", () => row.remove());
+    $("fields").appendChild(row);
+  }
+  $("add-field").addEventListener("click", () => addFieldRow());
+  addFieldRow();  // start with one empty row
+
+  function collectFields() {
+    const out = {};
+    for (const row of $("fields").querySelectorAll(".field-row")) {
+      const k = row.querySelector(".fkey").value.trim();
+      const v = row.querySelector(".fval").value;
+      if (k) out[k] = v;
+    }
+    return out;
+  }
+
   $("form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const status = $("status"), go = $("go");
@@ -203,6 +258,8 @@
     if ($("file-tpl").files.length) fd.append("template_docx", $("file-tpl").files[0]);
     fd.append("pdf", $("opt-pdf").checked ? "1" : "0");
     fd.append("ai", $("opt-ai").checked ? "1" : "0");
+    const fieldValues = collectFields();
+    if (Object.keys(fieldValues).length) fd.append("fields", JSON.stringify(fieldValues));
 
     go.disabled = true;
     go.innerHTML = "<span class='spinner'></span>Formatting…";
@@ -240,6 +297,16 @@
       a.querySelector("b").textContent = "⬇ " + title;
       a.querySelector("span").textContent = sub;
       dl.appendChild(a);
+    }
+
+    const warn = $("warnings");
+    const notes = data.notes || [];
+    warn.style.display = notes.length ? "block" : "none";
+    warn.innerHTML = "";
+    for (const note of notes) {
+      const li = document.createElement("li");
+      li.textContent = note;
+      warn.appendChild(li);
     }
 
     const badge = $("qa-badge");

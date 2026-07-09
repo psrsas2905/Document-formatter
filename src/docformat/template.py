@@ -22,6 +22,22 @@ class TemplateProfile:
         return self.style_map.get(label)
 
 
+def apply_field_values(profile: TemplateProfile, values: dict[str, str]) -> None:
+    """Merge per-document field values into the profile's replace map.
+
+    Keys name template placeholders without brackets: 'Client Name' fills
+    '[Client Name]'. Bracketed keys are used verbatim. Runtime values win
+    over the profile's own replace entries.
+    """
+    if not values:
+        return
+    replace = profile.raw.setdefault("replace", {})
+    for key, value in values.items():
+        key = key.strip()
+        placeholder = key if key.startswith("[") and key.endswith("]") else f"[{key}]"
+        replace[placeholder] = value
+
+
 def load_profile(path: str | Path) -> TemplateProfile:
     """Read a YAML profile from disk into a TemplateProfile.
 

@@ -1,0 +1,25 @@
+Heading 1	ACME WIDGET INSTALLATION GUIDE
+TOC Heading	Table of Contents
+Normal	
+TOC Heading	List of Figures
+Normal	
+Heading 2	Overview
+Body Text	The Acme Widget is a modular fastening system for industrial shelving. This guide walks a technician through unpacking, mounting and first-use checks. Read the safety section before starting work.
+Heading 3	Safety Precautions
+Body Text	Always disconnect mains power before opening the housing. The widget carries residual charge for up to two minutes after shutdown.
+List Bullet	Wear insulated gloves rated to 1000 V
+List Bullet	Keep the work area dry at all times
+List Bullet	Never bypass the interlock switch
+Heading 2	Installation Steps
+List Bullet	Unpack the widget and check the contents against the packing list.
+List Bullet	Mount the base plate using the four M6 bolts supplied.
+List Bullet 2	Torque each bolt to the value shown below.
+List Bullet 2	Re-check torque after the first 24 hours of operation.
+List Bullet	Connect the signal cable to port A.
+Caption	Figure : Wiring diagram for single-phase supply
+Body Text	The diagram above shows the recommended earthing arrangement. Local regulations take precedence where they differ.
+Caption	Table  - Torque settings by bolt size
+Heading 2	Maintenance Schedule
+Body Text	Inspect the fastening ring every six months. Replace the gasket kit whenever the housing is opened.
+Quote	Warranty is void if the unit is operated outside the rated temperature envelope.
+Body Text	For spare parts, quote the serial number printed on the base plate when contacting Acme support.

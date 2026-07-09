@@ -1,17 +1,114 @@
 """Generate a human-review QA report.
 
-TODO (Claude Code): list every block below the confidence threshold, any UNKNOWN
-blocks, missing image alt text, and broken heading hierarchy (e.g. H1 -> H3 jump).
-Output a readable qa_report.md.
+Human-in-the-loop by design: the pipeline targets 80-90% automation, and this
+report is where the remaining uncertainty lands instead of being silently
+guessed. It lists low-confidence / unknown blocks, heading-hierarchy jumps
+(e.g. H1 -> H3), and images missing alt text.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from .models import Document
+from .classify import CONFIDENCE_THRESHOLD
+from .models import BlockType, Document
+
+_HEADING_RANK = {BlockType.HEADING1: 1, BlockType.HEADING2: 2, BlockType.HEADING3: 3}
 
 
 def write_report(doc: Document, out_path: str | Path) -> Path:
     """Write qa_report.md summarizing everything a human should double-check."""
-    raise NotImplementedError("write_report(): low-confidence blocks, alt text, hierarchy")
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    uncertain = [
+        (i, b)
+        for i, b in enumerate(doc.blocks, 1)
+        if b.label is BlockType.UNKNOWN or b.confidence < CONFIDENCE_THRESHOLD
+    ]
+    jumps = _hierarchy_jumps(doc)
+    alt_issues = _missing_alt_text(doc)
+    total = len(doc.blocks)
+    auto = total - len(uncertain)
+
+    lines = [
+        "# QA Report",
+        "",
+        f"Source: `{doc.source_path or 'unknown'}`",
+        f"Blocks processed: {total} — {auto} classified confidently, "
+        f"{len(uncertain)} need review (threshold {CONFIDENCE_THRESHOLD}).",
+        "",
+        "## Blocks needing human review",
+        "",
+    ]
+    if uncertain:
+        lines += [
+            "| # | Assigned label | Confidence | Text |",
+            "|---|----------------|------------|------|",
+        ]
+        for i, b in uncertain:
+            lines.append(
+                f"| {i} | {b.label.value} | {b.confidence:.2f} | {_snip(b.text)} |"
+            )
+        lines += [
+            "",
+            "Check each block's assigned style in the output document and fix in "
+            "Word if wrong.",
+        ]
+    else:
+        lines.append("None — every block classified above the confidence threshold.")
+
+    lines += ["", "## Heading hierarchy", ""]
+    if jumps:
+        for prev, cur, text in jumps:
+            lines.append(
+                f"- Level jump {prev} → {cur} at heading “{_snip(text, 60)}” "
+                "(a level may be missing or misclassified)."
+            )
+    else:
+        lines.append("No level jumps detected.")
+
+    lines += ["", "## Images / alt text", ""]
+    if alt_issues:
+        lines += [f"- {msg}" for msg in alt_issues]
+    else:
+        lines.append("No image issues detected in the source body.")
+
+    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return out_path
+
+
+def _hierarchy_jumps(doc: Document) -> list[tuple[int, int, str]]:
+    """Headings that skip a level relative to the previous heading."""
+    jumps = []
+    prev = 0
+    for b in doc.blocks:
+        rank = _HEADING_RANK.get(b.label)
+        if rank is None:
+            continue
+        if prev and rank > prev + 1:
+            jumps.append((prev, rank, b.text))
+        prev = rank
+    return jumps
+
+
+def _missing_alt_text(doc: Document) -> list[str]:
+    """Inspect the source docx for inline images lacking alt text."""
+    if not doc.source_path or not Path(doc.source_path).exists():
+        return []
+    import docx
+    from docx.oxml.ns import qn
+
+    src = docx.Document(doc.source_path)
+    issues = []
+    for i, shape in enumerate(src.inline_shapes, 1):
+        doc_pr = shape._inline.find(qn("wp:docPr"))
+        descr = doc_pr.get("descr") if doc_pr is not None else None
+        if not descr:
+            issues.append(f"Image {i} in the source has no alt text (add one for accessibility).")
+    return issues
+
+
+def _snip(text: str, limit: int = 70) -> str:
+    text = text.replace("|", "\\|")
+    return text if len(text) <= limit else text[: limit - 1] + "…"

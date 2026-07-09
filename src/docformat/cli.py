@@ -24,6 +24,11 @@ from .template import load_profile
 app = typer.Typer(help="Turn raw Word drafts into publish-ready, template-conformant documents.")
 
 
+@app.callback()
+def _main() -> None:
+    """Keep 'format' as an explicit subcommand (docformat format INPUT ...)."""
+
+
 @app.command()
 def format(
     input: Path = typer.Argument(..., exists=True, help="Source .docx to format."),

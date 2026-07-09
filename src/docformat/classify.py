@@ -29,6 +29,8 @@ DEFAULT_BODY_PT = 11.0
 HEADING_MAX_WORDS = 12
 
 CAPTION_RE = re.compile(r"^(figure|table)\s+\d+", re.IGNORECASE)
+# "1 Title" / "2.1 Title" / "1.0 TITLE" — section numbering at line start.
+NUMBERED_HEADING_RE = re.compile(r"^(\d{1,2}(?:\.\d{1,2}){0,3})\.?\s+\S")
 
 # Built-in style names we recognize as already-valid labels (spec: trust them).
 STYLE_TO_LABEL: dict[str, BlockType] = {
@@ -52,8 +54,16 @@ def classify(doc: Document) -> Document:
     body_pt = _body_size(doc.blocks)
     size_rank = _heading_size_rank(doc.blocks, body_pt)
 
-    for block in doc.blocks:
-        block.label, block.confidence = _classify_block(block, body_pt, size_rank)
+    for i, block in enumerate(doc.blocks):
+        neighbors_long = (
+            i > 0
+            and i + 1 < len(doc.blocks)
+            and len(doc.blocks[i - 1].text) > 100
+            and len(doc.blocks[i + 1].text) > 100
+        )
+        block.label, block.confidence = _classify_block(
+            block, body_pt, size_rank, neighbors_long
+        )
 
     if doc.title is None:
         doc.title = next(
@@ -63,7 +73,10 @@ def classify(doc: Document) -> Document:
 
 
 def _classify_block(
-    block: Block, body_pt: float, size_rank: dict[float, BlockType]
+    block: Block,
+    body_pt: float,
+    size_rank: dict[float, BlockType],
+    neighbors_long: bool = False,
 ) -> tuple[BlockType, float]:
     h = block.hints
     text = block.text
@@ -87,6 +100,16 @@ def _classify_block(
     size = h.font_size_pt if h.font_size_pt is not None else DEFAULT_BODY_PT
     is_short = len(text.split()) <= HEADING_MAX_WORDS and not text.rstrip().endswith(".")
 
+    # 3b. Section-numbered line ("1 Title", "2.1 Title", "1.0 TITLE") -> heading
+    #     whose level comes straight from the numbering depth.
+    m = NUMBERED_HEADING_RE.match(text)
+    if m and is_short:
+        parts = m.group(1).split(".")
+        if len(parts) > 1 and parts[-1] == "0":
+            parts = parts[:-1]  # "1.0 PURPOSE" convention counts as level 1
+        level = min(len(parts), len(_HEADING_LEVELS))
+        return _HEADING_LEVELS[level - 1], 0.9 if h.bold else 0.85
+
     # 4. Larger than body -> heading; level from the document-wide size ranking.
     if size in size_rank:
         confidence = 0.9 if (h.bold or is_short) else 0.7
@@ -105,6 +128,18 @@ def _classify_block(
     # 6. Indented italic -> quote.
     if h.italic and h.list_level > 0:
         return BlockType.QUOTE, 0.7
+
+    # 6b. Short plain line sandwiched between long paragraphs -> likely a
+    #     heading whose formatting was lost; level unknowable, so it stays
+    #     under the threshold and reaches the QA report.
+    if (
+        neighbors_long
+        and len(text) < 40
+        and is_short
+        and not h.italic
+        and not text.rstrip().endswith((":", ";", ","))
+    ):
+        return BlockType.HEADING2, 0.55
 
     # 7. Everything else -> body.
     return BlockType.BODY, 0.8

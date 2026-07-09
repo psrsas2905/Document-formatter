@@ -157,3 +157,32 @@ def test_apply_field_values():
     assert profile.raw["replace"]["[Client Name]"] == "Acme"
     assert profile.raw["replace"]["[Custom]"] == "x"
     assert profile.raw["replace"]["[Document Title]"] == "{doc_title}"  # untouched
+
+
+def test_numbered_heading_heuristic():
+    from docformat.classify import classify
+    from docformat.ingest import ingest
+    from docformat.models import BlockType
+
+    doc = classify(ingest("samples/input_rich.docx"))
+    by_text = {b.text: b for b in doc.blocks}
+    assert by_text["1 Introduction"].label is BlockType.HEADING1
+    assert by_text["1.1 Governing Equation"].label is BlockType.HEADING2
+    assert by_text["2 Hardware Layout"].label is BlockType.HEADING1
+    assert all(
+        b.confidence >= 0.85
+        for b in doc.blocks
+        if b.label in {BlockType.HEADING1, BlockType.HEADING2}
+    )
+
+
+def test_context_heading_heuristic():
+    from docformat.classify import CONFIDENCE_THRESHOLD, classify
+    from docformat.models import Block, BlockType, Document
+
+    long = "x" * 150
+    doc = Document(blocks=[Block(text=long), Block(text="Lost Heading"), Block(text=long)])
+    classify(doc)
+    middle = doc.blocks[1]
+    assert middle.label is BlockType.HEADING2
+    assert middle.confidence < CONFIDENCE_THRESHOLD  # level is a guess -> QA

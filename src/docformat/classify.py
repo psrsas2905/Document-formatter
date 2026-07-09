@@ -1,22 +1,130 @@
 """Deterministic, heuristic classifier. NO AI. This is the core engine.
 
-TODO (Claude Code): implement the heuristics from PROJECT_SPEC section 5.
-Assign a BlockType and a confidence (0..1) to every block. Anything below
-CONFIDENCE_THRESHOLD should remain low-confidence so QA can flag it.
+Implements PROJECT_SPEC §5. Rules fire in trust order:
+  1. an existing recognized template style wins outright;
+  2. Figure/Table caption prefixes;
+  3. typed list markers;
+  4. font size larger than body -> heading, ranked largest=H1, next=H2, ...;
+  5. short + bold + no trailing period at body size -> heading (level uncertain,
+     so confidence lands below the QA threshold on purpose);
+  6. indented italic -> quote;
+  7. everything else -> body.
+
+Every label carries a confidence in 0..1; anything below CONFIDENCE_THRESHOLD
+is surfaced by qa.py for human review rather than silently trusted.
 """
 
 from __future__ import annotations
 
-from .models import Document
+import re
+
+from .models import Block, BlockType, Document
 
 CONFIDENCE_THRESHOLD = 0.6
 
+# Font sizes within this tolerance of body size count as body-sized.
+SIZE_TOLERANCE_PT = 0.5
+# Default effective size when neither run nor style specifies one (Word's Normal).
+DEFAULT_BODY_PT = 11.0
+HEADING_MAX_WORDS = 12
+
+CAPTION_RE = re.compile(r"^(figure|table)\s+\d+", re.IGNORECASE)
+
+# Built-in style names we recognize as already-valid labels (spec: trust them).
+STYLE_TO_LABEL: dict[str, BlockType] = {
+    "Title": BlockType.HEADING1,
+    "Heading 1": BlockType.HEADING1,
+    "Heading 2": BlockType.HEADING2,
+    "Heading 3": BlockType.HEADING3,
+    "Body Text": BlockType.BODY,
+    "Caption": BlockType.CAPTION,
+    "List Bullet": BlockType.LIST_ITEM,
+    "List Number": BlockType.LIST_ITEM,
+    "Quote": BlockType.QUOTE,
+    "Intense Quote": BlockType.QUOTE,
+}
+
+_HEADING_LEVELS = [BlockType.HEADING1, BlockType.HEADING2, BlockType.HEADING3]
+
 
 def classify(doc: Document) -> Document:
-    """Label every block in-place and return the Document.
+    """Label every block in-place and return the Document."""
+    body_pt = _body_size(doc.blocks)
+    size_rank = _heading_size_rank(doc.blocks, body_pt)
 
-    Heuristics (see spec): relative font size -> heading level; short+bold+no
-    trailing period -> heading; 'Figure N'/'Table N' -> caption; list markers ->
-    list items; valid existing style -> trust it; else -> body.
-    """
-    raise NotImplementedError("classify(): implement heuristics from PROJECT_SPEC §5")
+    for block in doc.blocks:
+        block.label, block.confidence = _classify_block(block, body_pt, size_rank)
+
+    if doc.title is None:
+        doc.title = next(
+            (b.text for b in doc.blocks if b.label is BlockType.HEADING1), None
+        )
+    return doc
+
+
+def _classify_block(
+    block: Block, body_pt: float, size_rank: dict[float, BlockType]
+) -> tuple[BlockType, float]:
+    h = block.hints
+    text = block.text
+
+    # 1. Block already carries a valid template style name -> trust it.
+    if h.existing_style in STYLE_TO_LABEL:
+        return STYLE_TO_LABEL[h.existing_style], 1.0
+
+    # 2. Starts with "Figure N" / "Table N" -> caption.
+    if CAPTION_RE.match(text):
+        return BlockType.CAPTION, 0.95
+
+    # 3. Typed bullet/number marker -> list item (level already in hints).
+    if h.is_list_marker:
+        return BlockType.LIST_ITEM, 0.9
+
+    size = h.font_size_pt if h.font_size_pt is not None else DEFAULT_BODY_PT
+    is_short = len(text.split()) <= HEADING_MAX_WORDS and not text.rstrip().endswith(".")
+
+    # 4. Larger than body -> heading; level from the document-wide size ranking.
+    if size in size_rank:
+        confidence = 0.9 if (h.bold or is_short) else 0.7
+        return size_rank[size], confidence
+
+    # 5. Short + bold + no trailing period at body size -> heading, but the level
+    #    is a guess (one deeper than the deepest size-derived heading), so keep
+    #    confidence under the threshold to route it to the QA report.
+    if h.bold and is_short:
+        deepest = max(
+            (_HEADING_LEVELS.index(lbl) for lbl in size_rank.values()), default=-1
+        )
+        level = min(deepest + 1, len(_HEADING_LEVELS) - 1)
+        return _HEADING_LEVELS[level], 0.55
+
+    # 6. Indented italic -> quote.
+    if h.italic and h.list_level > 0:
+        return BlockType.QUOTE, 0.7
+
+    # 7. Everything else -> body.
+    return BlockType.BODY, 0.8
+
+
+def _body_size(blocks: list[Block]) -> float:
+    """Most common effective font size across blocks — assumed to be body text."""
+    counts: dict[float, int] = {}
+    for b in blocks:
+        size = b.hints.font_size_pt if b.hints.font_size_pt is not None else DEFAULT_BODY_PT
+        counts[size] = counts.get(size, 0) + 1
+    return max(counts, key=lambda s: counts[s]) if counts else DEFAULT_BODY_PT
+
+
+def _heading_size_rank(blocks: list[Block], body_pt: float) -> dict[float, BlockType]:
+    """Map each distinct larger-than-body size to a heading level, largest = H1."""
+    larger = sorted(
+        {
+            b.hints.font_size_pt
+            for b in blocks
+            if b.hints.font_size_pt is not None
+            and b.hints.font_size_pt > body_pt + SIZE_TOLERANCE_PT
+            and b.hints.existing_style is None  # styled blocks are handled by rule 1
+        },
+        reverse=True,
+    )
+    return {size: _HEADING_LEVELS[min(i, 2)] for i, size in enumerate(larger)}

@@ -25,7 +25,13 @@ def apply_styles(doc: Document, profile: TemplateProfile, out_path: str | Path) 
     template_path = _resolve_template(profile)
 
     out = docx.Document(str(template_path))
-    _clear_body(out)
+    keep_cover = bool(profile.raw.get("cover_page", {}).get("keep"))
+    cover_kept = _clear_body(out, keep_cover=keep_cover)
+    if keep_cover and not cover_kept:
+        doc.notes.append(
+            "cover_page.keep is enabled but the template has no internal section "
+            "break marking a cover page — nothing was kept."
+        )
     # Resolve style OBJECTS by UI name and style id. Assigning the object (not
     # the name) sidesteps python-docx's builtin-name translation, which fails
     # on real-world templates whose styles carry nonstandard internal names.
@@ -91,12 +97,34 @@ def _style_for_block(block, profile: TemplateProfile, available: set[str]) -> st
     return style_name
 
 
-def _clear_body(out) -> None:
-    """Remove any content the template document carries in its body."""
-    for para in list(out.paragraphs):
-        para._element.getparent().remove(para._element)
-    for table in list(out.tables):
-        table._element.getparent().remove(table._element)
+def _clear_body(out, keep_cover: bool = False) -> bool:
+    """Remove the template's body content before pouring the draft in.
+
+    With keep_cover, everything up to and including the template's first
+    internal section break (i.e. the cover page section) is preserved.
+    Returns True if a cover was kept.
+    """
+    from docx.oxml.ns import qn
+
+    body = out.element.body
+    cover_end = None
+    if keep_cover:
+        for el in body:
+            pPr = el.find(qn("w:pPr"))
+            if el.tag == qn("w:p") and pPr is not None and pPr.find(qn("w:sectPr")) is not None:
+                cover_end = el  # paragraph carrying the cover section's break
+                break
+
+    in_cover = cover_end is not None
+    for el in list(body):
+        if el.tag == qn("w:sectPr"):
+            continue  # the body-level section properties always stay
+        if in_cover:
+            if el is cover_end:
+                in_cover = False
+            continue  # keep cover content
+        body.remove(el)
+    return cover_end is not None
 
 
 def _resolve_template(profile: TemplateProfile) -> Path:

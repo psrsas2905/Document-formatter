@@ -55,7 +55,7 @@ def format(
     doc = _classify_ai.classify_ai(doc) if ai else _classify.classify(doc)
 
     styled = _apply.apply_styles(doc, profile, out / (input.stem + "_formatted.docx"))
-    _elements.add_elements(styled, profile)
+    _elements.add_elements(styled, profile, doc)
     _qa.write_report(doc, out / "qa_report.md")
 
     if pdf:

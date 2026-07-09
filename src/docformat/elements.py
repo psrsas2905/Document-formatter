@@ -15,6 +15,7 @@ Field codes need raw OOXML that python-docx has no API for, hence lxml here.
 from __future__ import annotations
 
 import re
+from datetime import date
 from pathlib import Path
 
 import docx
@@ -27,8 +28,12 @@ PAGE_SIZES_MM = {"A4": (210, 297), "Letter": (215.9, 279.4)}
 FIELD_TOKENS = {"{page}": "PAGE", "{pages}": "NUMPAGES"}
 
 
-def add_elements(docx_path: str | Path, profile) -> Path:
-    """Add headers/footers/page numbers/TOC to an existing styled .docx."""
+def add_elements(docx_path: str | Path, profile, model=None) -> Path:
+    """Add headers/footers/page numbers/TOC to an existing styled .docx.
+
+    `model` is the pipeline's Document; when given, leftover template
+    placeholders (like "[Client Name]") are appended to its QA notes.
+    """
     docx_path = Path(docx_path)
     doc = docx.Document(str(docx_path))
     raw = profile.raw
@@ -37,12 +42,15 @@ def add_elements(docx_path: str | Path, profile) -> Path:
         "{doc_title}": doc.core_properties.title or "",
         "{version}": str(raw.get("output", {}).get("version", "")),
         "{classification}": str(raw.get("footer", {}).get("classification", "")),
+        "{date}": date.today().strftime("%d %B %Y"),
     }
 
     _apply_page_setup(doc, raw.get("page", {}))
     _write_header_footer(doc, raw, tokens)
     _auto_number_captions(doc, profile)
     _insert_front_matter(doc, raw)
+    if model is not None:
+        _note_unfilled_placeholders(doc, model)
 
     doc.save(docx_path)
     return docx_path
@@ -72,20 +80,28 @@ def _write_header_footer(doc, raw: dict, tokens: dict) -> None:
     footer_spec = raw.get("footer", {})
     styles = _paragraph_styles(doc)
 
-    # Placeholder substitution inside the template's OWN header/footer content,
-    # e.g. replace "[Document Title]" with the real title. Configured per
-    # profile under header.replace / footer.replace.
-    replacements = {**header_spec.get("replace", {}), **footer_spec.get("replace", {})}
+    # Placeholder substitution inside the template's OWN content — headers,
+    # footers and the (kept) cover page — e.g. "[Document Title]" -> the real
+    # title. Configured under a top-level `replace:` (header.replace /
+    # footer.replace also accepted).
+    replacements = {
+        **raw.get("replace", {}),
+        **header_spec.get("replace", {}),
+        **footer_spec.get("replace", {}),
+    }
     if replacements:
         from docx.text.paragraph import Paragraph
 
+        parts = [doc.element.body]  # cover page content lives in the body
         for section in doc.sections:
             for part in (section.header, section.footer,
                          section.first_page_header, section.first_page_footer):
-                # Walk every paragraph in the part, including those nested in
-                # tables/text boxes — brand headers are often laid out that way.
-                for p_el in part._element.iter(qn("w:p")):
-                    _replace_placeholders(Paragraph(p_el, part), replacements, tokens)
+                parts.append(part._element)
+        for root in parts:
+            # Walk every paragraph, including those nested in tables/text
+            # boxes — brand covers and headers are often laid out that way.
+            for p_el in root.iter(qn("w:p")):
+                _replace_placeholders(Paragraph(p_el, doc), replacements, tokens)
 
     for section in doc.sections:
         if header_spec.get("text"):
@@ -208,11 +224,42 @@ def _insert_front_matter(doc, raw: dict) -> None:
         )
 
 
+PLACEHOLDER_RE = re.compile(r"\[[^\[\]\n]{1,60}\]")
+
+
+def _note_unfilled_placeholders(doc, model) -> None:
+    """QA-note any template placeholders like '[Client Name]' still unfilled
+    (in the kept cover page, headers or footers) so a human fills them in."""
+    from docx.text.paragraph import Paragraph
+
+    roots = [doc.element.body] + [
+        part._element
+        for section in doc.sections
+        for part in (section.header, section.footer,
+                     section.first_page_header, section.first_page_footer)
+    ]
+    leftover: dict[str, int] = {}
+    for root in roots:
+        for p_el in root.iter(qn("w:p")):
+            for m in PLACEHOLDER_RE.findall(Paragraph(p_el, doc).text):
+                leftover[m] = leftover.get(m, 0) + 1
+    for placeholder, count in sorted(leftover.items()):
+        model.notes.append(
+            f"Template placeholder {placeholder} is still unfilled "
+            f"({count} occurrence(s)) — fill it in, or map it under `replace:` "
+            "in the profile."
+        )
+
+
 def _front_matter_anchor(doc):
-    """Element after which front matter goes: the leading H1 title, else None."""
-    paras = doc.paragraphs
-    if paras and paras[0].style.name == "Heading 1":
-        return paras[0]._p
+    """Element after which front matter goes: the poured document's H1 title.
+
+    With a kept cover page the body no longer starts at the draft content, so
+    anchor on the first Heading 1 anywhere; without one, fall back to the start.
+    """
+    for para in doc.paragraphs:
+        if para.style is not None and para.style.name == "Heading 1":
+            return para._p
     return None
 
 

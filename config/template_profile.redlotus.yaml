@@ -16,6 +16,19 @@ style_map:
   ListItem: "List Paragraph"
   Quote:    "Normal"          # not defined in the template -> default formatting
 
+# Keep the template's branded cover page (everything up to its first internal
+# section break). Its placeholders are filled via `replace:` below; whatever
+# stays unfilled (e.g. [Client Name]) is flagged in the QA report.
+cover_page:
+  keep: true
+
+# Fill the template's own placeholders (cover page, headers, footers) with
+# token-expanded values. Tokens: {doc_title} {version} {date} {classification}.
+replace:
+  "[Document Title]": "{doc_title}"
+  "[DD Month YYYY]": "{date}"
+  "[00]": "{version}"
+
 # No `page:` section — keep the template's own A4 geometry and margins.
 
 # The template's header already carries the RedLotus logo banner; its footer
@@ -36,8 +49,3 @@ output:
   filename: "{basename}_v{version}_{date}"
   version: "1.0"
   export_pdf: true
-
-# Replace the template's own header placeholder with the document title.
-header:
-  replace:
-    "[Document Title]": "{doc_title}"

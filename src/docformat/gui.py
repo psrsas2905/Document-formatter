@@ -122,7 +122,7 @@ class _Handler(BaseHTTPRequestHandler):
         doc = _classify_ai.classify_ai(doc) if use_ai else _classify.classify(doc)
 
         styled = _apply.apply_styles(doc, profile, session / (src_path.stem + "_formatted.docx"))
-        _elements.add_elements(styled, profile)
+        _elements.add_elements(styled, profile, doc)
         qa_path = _qa.write_report(doc, session / "qa_report.md")
 
         pdf_path = None

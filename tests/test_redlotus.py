@@ -43,17 +43,35 @@ def test_ingests_template_with_dangling_styles():
 
 def test_brand_header_and_footer_survive(result):
     _, out, _ = result
-    header = out.sections[0].header
+    # Two sections: cover (plain) + content (branded header/footer).
+    assert len(out.sections) == 2
+    header = out.sections[1].header
     assert len(header._element.findall(f".//{A_NS}blip")) == 2  # logo banner
-    footer_text = "".join(p.text for p in out.sections[0].footer.paragraphs)
+    footer_text = "".join(p.text for p in out.sections[1].footer.paragraphs)
     assert "RedLotus Pharmtech" in footer_text
 
 
 def test_header_placeholder_replaced(result):
     _, out, _ = result
-    header_xml = out.sections[0].header._element.xml
+    header_xml = out.sections[1].header._element.xml
     assert "[Document Title]" not in header_xml
     assert "ACME WIDGET INSTALLATION GUIDE" in header_xml
+
+
+def test_cover_page_kept_and_filled(result):
+    doc, out, _ = result
+    body_xml = out.element.body.xml
+    # Cover content survives: company blurb + its image; title placeholder filled.
+    assert "Pharma Technical Services Company" in body_xml
+    assert len(out.element.body.findall(f".//{A_NS}blip")) >= 1
+    assert "[Document Title]" not in body_xml
+    # Unfilled cover placeholders are routed to QA.
+    assert any("[Client Name]" in n for n in doc.notes)
+    # Front matter goes after the poured title, not before the cover.
+    texts = [p.text for p in out.paragraphs]
+    toc_i = texts.index("Table of Contents")
+    title_i = texts.index("ACME WIDGET INSTALLATION GUIDE")
+    assert toc_i == title_i + 1
 
 
 def test_defined_styles_applied_and_missing_ones_reported(result):

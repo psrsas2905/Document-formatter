@@ -1,22 +1,38 @@
 """Apply the template's named styles to a classified Document.
 
 Opens the profile's template file so the output inherits the template's style
-definitions and page setup, empties its body, then pours each block in with the
-mapped named style. Blocks are re-written as fresh single-run paragraphs, so no
-source direct formatting (hand-set sizes, bold, tabs) survives — the named style
-is the only thing controlling appearance. Typed list markers are stripped
-because the list style supplies its own bullet/number.
+definitions and page setup, empties its body (optionally keeping the cover
+page), then pours each block in with the mapped named style.
+
+Content preservation rules (per block, in source order):
+  - text: re-emitted as fresh runs — paragraph-level direct formatting dies with
+    the source. Inline bold/italic *emphasis* inside Body/List/Quote blocks is
+    kept, unless the whole paragraph was uniformly bold/italic (that was
+    decorative pseudo-heading formatting, which the named style replaces).
+  - OMML math: carried verbatim — never re-rendered.
+  - images: re-embedded from their blobs with original size and alt text.
+  - footnotes: re-attached via the footnotes part (plain text).
+  - tables: the original w:tbl is imported content-intact, image relationships
+    rewritten, and the profile's table_style applied when the template has it.
+  - OLE objects (e.g. MathType): cannot be carried — QA-flagged.
 """
 
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 
 import docx
+from docx.oxml import parse_xml
+from docx.oxml.ns import qn
+from docx.shared import Emu
 
-from .ingest import LIST_MARKER_RE
-from .models import BlockType, Document
+from .footnotes import FootnoteWriter
+from .ingest import A_BLIP, LIST_MARKER_RE, R_EMBED
+from .models import BlockType, Document, Segment
 from .template import TemplateProfile
+
+_EMPHASIS_LABELS = {BlockType.BODY, BlockType.LIST_ITEM, BlockType.QUOTE}
 
 
 def apply_styles(doc: Document, profile: TemplateProfile, out_path: str | Path) -> Path:
@@ -36,9 +52,14 @@ def apply_styles(doc: Document, profile: TemplateProfile, out_path: str | Path) 
     # the name) sidesteps python-docx's builtin-name translation, which fails
     # on real-world templates whose styles carry nonstandard internal names.
     styles = _paragraph_styles(out)
-
+    footnotes = FootnoteWriter(out)
     missing: dict[str, int] = {}
+    objects = 0
+
     for block in doc.blocks:
+        if block.label is BlockType.TABLE:
+            _emit_table(out, block, profile, doc)
+            continue
         style_name = _style_for_block(block, profile, set(styles))
         style = styles.get(style_name)
         if style is None:
@@ -46,13 +67,19 @@ def apply_styles(doc: Document, profile: TemplateProfile, out_path: str | Path) 
             # replacement: emit the paragraph unstyled (the template's document
             # defaults apply) and put the mismatch in the QA report.
             missing[style_name] = missing.get(style_name, 0) + 1
-        text = block.text
-        if block.label is BlockType.LIST_ITEM:
-            text = LIST_MARKER_RE.sub("", text)
-        para = out.add_paragraph(text)
-        if style is not None:
-            para.style = style
+        objects += _emit_paragraph(out, block, style, footnotes)
 
+    carried = footnotes.flush()
+    if carried:
+        doc.notes.append(
+            f"{carried} footnote(s) carried over as plain text — verify their "
+            "formatting and placement."
+        )
+    if objects:
+        doc.notes.append(
+            f"{objects} embedded object(s) (e.g. MathType/OLE) could not be carried "
+            "over — only their fallback text was kept. Re-insert them manually."
+        )
     for style_name, count in missing.items():
         doc.notes.append(
             f"Profile maps to style {style_name!r} but the template does not define "
@@ -64,6 +91,148 @@ def apply_styles(doc: Document, profile: TemplateProfile, out_path: str | Path) 
         out.core_properties.title = doc.title
     out.save(out_path)
     return out_path
+
+
+# --- paragraph emission -------------------------------------------------------
+
+
+def _emit_paragraph(out, block, style, footnotes: FootnoteWriter) -> int:
+    """Write one block as a paragraph; returns count of uncarriable objects."""
+    para = out.add_paragraph()
+    if style is not None:
+        para.style = style
+
+    segments = block.segments or [Segment(kind="text", text=block.text)]
+    texts = [s for s in segments if s.kind == "text" and s.text.strip()]
+    uniform_bold = bool(texts) and all(s.bold for s in texts)
+    uniform_italic = bool(texts) and all(s.italic for s in texts)
+    keep_emphasis = block.label in _EMPHASIS_LABELS
+    objects = 0
+    lead_pending = True  # strip indentation/list markers from the leading text
+
+    for seg in segments:
+        if seg.kind == "text":
+            text = seg.text
+            if lead_pending:
+                text = text.lstrip("\t ")
+                if block.label is BlockType.LIST_ITEM:
+                    text = LIST_MARKER_RE.sub("", text)
+                if text:
+                    lead_pending = False
+            if not text:
+                continue
+            run = para.add_run(text)
+            if keep_emphasis:
+                if seg.bold and not uniform_bold:
+                    run.font.bold = True
+                if seg.italic and not uniform_italic:
+                    run.font.italic = True
+        elif seg.kind == "math":
+            para._p.append(parse_xml(seg.xml))
+            lead_pending = False
+        elif seg.kind == "image" and seg.blob:
+            run = para.add_run()
+            size = {}
+            if seg.width_emu:
+                size["width"] = Emu(seg.width_emu)
+            if seg.height_emu:
+                size["height"] = Emu(seg.height_emu)
+            picture = run.add_picture(BytesIO(seg.blob), **size)
+            if seg.alt:
+                picture._inline.docPr.set("descr", seg.alt)
+            lead_pending = False
+        elif seg.kind == "footnote":
+            _append_footnote_ref(para, footnotes.add(seg.text))
+        elif seg.kind == "object":
+            if seg.text:
+                para.add_run(seg.text)
+            objects += 1
+    return objects
+
+
+def _append_footnote_ref(para, fn_id: int) -> None:
+    from docx.oxml import OxmlElement
+
+    run = OxmlElement("w:r")
+    rpr = OxmlElement("w:rPr")
+    va = OxmlElement("w:vertAlign")
+    va.set(qn("w:val"), "superscript")
+    rpr.append(va)
+    run.append(rpr)
+    ref = OxmlElement("w:footnoteReference")
+    ref.set(qn("w:id"), str(fn_id))
+    run.append(ref)
+    para._p.append(run)
+
+
+# --- tables ---------------------------------------------------------------------
+
+
+def _emit_table(out, block, profile: TemplateProfile, doc: Document) -> None:
+    """Import the source table content-intact; restyle via the template."""
+    tbl = parse_xml(block.xml)
+
+    for blip in tbl.iter(A_BLIP):
+        rid = blip.get(R_EMBED)
+        if rid and rid in block.resources:
+            blob, _ext = block.resources[rid]
+            new_rid, _ = out.part.get_or_add_image(BytesIO(blob))
+            blip.set(R_EMBED, new_rid)
+
+    style_name = profile.raw.get("table_style")
+    if style_name:
+        style = _table_style(out, style_name)
+        if style is not None:
+            _set_table_style(tbl, style.style_id)
+        else:
+            _note_once(
+                doc,
+                f"Profile sets table_style {style_name!r} but the template does not "
+                "define that table style — tables keep their source formatting.",
+            )
+
+    body = out.element.body
+    sect = body.find(qn("w:sectPr"))
+    if sect is not None:
+        sect.addprevious(tbl)
+    else:
+        body.append(tbl)
+
+
+def _table_style(out, name: str):
+    from docx.enum.style import WD_STYLE_TYPE
+
+    for s in out.styles:
+        if s.type == WD_STYLE_TYPE.TABLE and name in (s.name, s.style_id):
+            return s
+    return None
+
+
+def _set_table_style(tbl, style_id: str) -> None:
+    """Point the table at the template's style; drop direct border formatting."""
+    tbl_pr = tbl.find(qn("w:tblPr"))
+    if tbl_pr is None:
+        tbl_pr = parse_xml(
+            '<w:tblPr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>'
+        )
+        tbl.insert(0, tbl_pr)
+    for tag in ("w:tblStyle", "w:tblBorders"):
+        el = tbl_pr.find(qn(tag))
+        if el is not None:
+            tbl_pr.remove(el)
+    style_el = parse_xml(
+        f'<w:tblStyle xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+        f'w:val="{style_id}"/>'
+    )
+    tbl_pr.insert(0, style_el)
+
+
+def _note_once(doc: Document, note: str) -> None:
+    if note not in doc.notes:
+        doc.notes.append(note)
+
+
+# --- template plumbing ----------------------------------------------------------
 
 
 def _paragraph_styles(out) -> dict:
@@ -104,8 +273,6 @@ def _clear_body(out, keep_cover: bool = False) -> bool:
     internal section break (i.e. the cover page section) is preserved.
     Returns True if a cover was kept.
     """
-    from docx.oxml.ns import qn
-
     body = out.element.body
     cover_end = None
     if keep_cover:

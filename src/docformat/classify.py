@@ -68,6 +68,10 @@ def _classify_block(
     h = block.hints
     text = block.text
 
+    # 0. Tables are structural, not stylistic — carried through as-is.
+    if block.xml is not None:
+        return BlockType.TABLE, 1.0
+
     # 1. Block already carries a valid template style name -> trust it.
     if h.existing_style in STYLE_TO_LABEL:
         return STYLE_TO_LABEL[h.existing_style], 1.0

@@ -51,3 +51,6 @@ output:
   filename: "{basename}_v{version}_{date}"
   version: "1.0"
   export_pdf: true
+
+# Named table style applied to carried-through tables.
+table_style: "Table Grid"

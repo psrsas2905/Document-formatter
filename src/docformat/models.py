@@ -20,7 +20,33 @@ class BlockType(str, Enum):
     CAPTION = "Caption"
     LIST_ITEM = "ListItem"
     QUOTE = "Quote"
+    TABLE = "Table"  # carried through content-intact, restyled by the template
     UNKNOWN = "Unknown"  # could not classify confidently -> goes to QA report
+
+
+@dataclass
+class Segment:
+    """One inline piece of a paragraph, in source order.
+
+    kind:
+      - "text":     `text` plus inline bold/italic emphasis
+      - "math":     `xml` holds the original OMML (carried verbatim)
+      - "image":    `blob`/`ext` hold the picture; size in EMU; `alt` its alt text
+      - "footnote": `text` holds the footnote body text (re-attached on output)
+      - "object":   embedded OLE object (e.g. MathType) — cannot be carried;
+                    flagged in the QA report, `text` holds any fallback text
+    """
+
+    kind: str
+    text: str = ""
+    bold: bool = False
+    italic: bool = False
+    xml: str | None = None
+    blob: bytes | None = None
+    ext: str = "png"
+    width_emu: int | None = None
+    height_emu: int | None = None
+    alt: str = ""
 
 
 @dataclass
@@ -38,12 +64,18 @@ class FormatHints:
 
 @dataclass
 class Block:
-    """One logical paragraph of the source document."""
+    """One logical block of the source document (a paragraph or a table)."""
 
     text: str
     hints: FormatHints = field(default_factory=FormatHints)
     label: BlockType = BlockType.UNKNOWN
     confidence: float = 0.0  # 0..1; low values are flagged for human review
+    # Inline content in source order; empty means plain text-only paragraph.
+    segments: list[Segment] = field(default_factory=list)
+    # For TABLE blocks: the original w:tbl XML, plus image blobs keyed by the
+    # relationship id referenced inside that XML.
+    xml: str | None = None
+    resources: dict[str, tuple[bytes, str]] = field(default_factory=dict)
 
 
 @dataclass

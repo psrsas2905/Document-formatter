@@ -53,3 +53,29 @@ def test_classify_sample():
     assert ambiguous.confidence < CONFIDENCE_THRESHOLD  # must reach the QA report
 
     assert all(b.label is not BlockType.UNKNOWN for b in doc.blocks)
+
+
+def test_apply_styles(tmp_path):
+    import docx
+
+    from docformat.apply import apply_styles
+    from docformat.classify import classify
+    from docformat.ingest import ingest
+    from docformat.template import load_profile
+
+    profile = load_profile("config/template_profile.example.yaml")
+    doc = classify(ingest("samples/input_messy.docx"))
+    out = apply_styles(doc, profile, tmp_path / "styled.docx")
+
+    result = docx.Document(str(out))
+    styles = [p.style.name for p in result.paragraphs]
+    assert styles[0] == "Heading 1"
+    assert "List Bullet" in styles and "Caption" in styles and "Quote" in styles
+    assert "List Bullet 2" in styles  # nested a)/b) items pick the level variant
+
+    for para in result.paragraphs:
+        assert "\t" not in para.text
+        for run in para.runs:  # no direct formatting survives
+            assert run.font.size is None and run.font.bold is None and run.font.italic is None
+    markers = ("•", "-", "*", "1.", "a)")
+    assert not any(p.text.startswith(markers) for p in result.paragraphs)

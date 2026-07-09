@@ -29,6 +29,7 @@ def load_profile(path: str | Path) -> TemplateProfile:
     """
     path = Path(path)
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    data["_profile_path"] = str(path.resolve())  # lets apply.py resolve template_file
     return TemplateProfile(
         name=data.get("name", "Unnamed"),
         template_file=data["template_file"],

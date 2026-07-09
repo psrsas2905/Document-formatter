@@ -65,5 +65,27 @@ def format(
     typer.echo(f"Done. Output in: {out}")
 
 
+@app.command()
+def gui(
+    template: Path | None = typer.Option(
+        None,
+        "--template",
+        "-t",
+        help="template_profile.yaml to use (default: config/template_profile.example.yaml).",
+    ),
+    port: int = typer.Option(8765, "--port", help="Port on 127.0.0.1 to serve the GUI."),
+    browser: bool = typer.Option(True, "--browser/--no-browser", help="Open the browser."),
+) -> None:
+    """Launch the local web GUI (everything stays on this machine)."""
+    from . import gui as _gui
+
+    profile_path = template or _gui.default_profile_path()
+    if profile_path is None or not Path(profile_path).exists():
+        raise typer.BadParameter(
+            "No template profile found — pass one with --template path/to/profile.yaml"
+        )
+    _gui.serve(Path(profile_path), port=port, open_browser=browser)
+
+
 if __name__ == "__main__":
     app()

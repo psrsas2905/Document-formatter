@@ -94,6 +94,26 @@ The executable bundles Python, python-docx, the example profile and the demo
 template; only LibreOffice is still needed on the target machine for PDF
 export. Build on each OS you ship to (PyInstaller doesn't cross-compile).
 
+## Content preservation
+
+Rebuilding a draft into template styles must not lose content. The pipeline
+carries through, content-intact:
+
+- **Equations** — OMML math XML is carried verbatim, never re-rendered
+- **Images** — re-embedded with original size and alt text (inline and block)
+- **Tables** — data untouched; restyled via the profile's `table_style`
+- **Footnotes** — re-attached (plain text; flagged in the QA report)
+- **Inline emphasis** — bold/italic *inside* body text survives; uniform
+  whole-paragraph bold (pseudo-heading decoration) is replaced by the style
+- MathType/OLE objects can't be carried — the QA report lists each one
+
+Input formats: `.docx`, `.doc`, `.odt`, `.rtf`, `.txt` (and `.md` with pandoc
+installed) — everything is converted offline before processing.
+
+Preset profiles ship for APA 7th (`config/template_profile.apa.yaml`) and
+GB/T 7713.1 (`config/template_profile.gbt7713.yaml`) page geometry — pair them
+with your institution's template file for typography.
+
 ## Roadmap
 
 - [x] Deterministic core: ingest → classify → apply → export
@@ -102,6 +122,8 @@ export. Build on each OS you ship to (PyInstaller doesn't cross-compile).
 - [x] Optional offline AI classifier (Ollama) behind `--ai`
 - [x] Standalone executable (PyInstaller)
 - [x] Local web GUI for non-technical writers
+- [x] Content preservation: equations, images, tables, footnotes, emphasis
+- [x] Brand templates with cover pages + per-document field values
 
 ## Contributing
 

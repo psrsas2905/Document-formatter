@@ -14,7 +14,7 @@ pyinstaller \
   --collect-all docx \
   --paths src \
   --add-data "src/docformat/assets:docformat/assets" \
-  --add-data "config/template_profile.example.yaml:config" \
+  --add-data "config:config" \
   --add-data "templates/org_standard.docx:templates" \
   src/docformat/__main__.py
 

@@ -229,3 +229,16 @@ def test_convert_rejects_unknown(tmp_path):
     bad.write_text("data")
     with pytest.raises(ValueError, match="Unsupported input type"):
         ensure_docx(bad, tmp_path)
+
+
+def test_preset_profiles_load():
+    from docformat.template import load_profile
+
+    apa = load_profile("config/template_profile.apa.yaml")
+    assert apa.raw["page"]["size"] == "Letter" and not apa.raw["toc"]["enabled"]
+    gbt = load_profile("config/template_profile.gbt7713.yaml")
+    assert gbt.raw["page"]["margins_mm"]["left"] == 31.7 and gbt.raw["toc"]["enabled"]
+    for profile in (apa, gbt):
+        assert set(profile.style_map) == {
+            "Heading1", "Heading2", "Heading3", "Body", "Caption", "ListItem", "Quote",
+        }

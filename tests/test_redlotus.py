@@ -29,7 +29,7 @@ def result(tmp_path_factory):
     profile = load_profile("config/template_profile.redlotus.yaml")
     doc = classify(ingest("samples/input_messy.docx"))
     styled = apply_styles(doc, profile, tmp / "out.docx")
-    add_elements(styled, profile)
+    add_elements(styled, profile, doc)
     qa = write_report(doc, tmp / "qa_report.md")
     return doc, docx.Document(str(styled)), qa
 

@@ -186,3 +186,46 @@ def test_context_heading_heuristic():
     middle = doc.blocks[1]
     assert middle.label is BlockType.HEADING2
     assert middle.confidence < CONFIDENCE_THRESHOLD  # level is a guess -> QA
+
+
+def test_convert_txt_input(tmp_path):
+    import docx
+
+    from docformat.convert import ensure_docx
+
+    src = tmp_path / "draft.txt"
+    src.write_text("Title Line\n\nBody paragraph one\ncontinued here.\n\nSecond para.\n")
+    out = ensure_docx(src, tmp_path / "conv")
+    texts = [p.text for p in docx.Document(str(out)).paragraphs]
+    assert texts == ["Title Line", "Body paragraph one continued here.", "Second para."]
+
+
+def test_convert_doc_input(tmp_path):
+    import pytest
+
+    from docformat.convert import ensure_docx
+    from docformat.export import soffice_available
+    from docformat.ingest import ingest
+
+    if not soffice_available():
+        pytest.skip("LibreOffice not installed")
+    import subprocess
+
+    subprocess.run(
+        ["soffice", "--headless", "--convert-to", "doc", "--outdir", str(tmp_path),
+         "samples/input_messy.docx"],
+        check=True, capture_output=True,
+    )
+    out = ensure_docx(tmp_path / "input_messy.doc", tmp_path / "conv")
+    assert out.suffix == ".docx" and len(ingest(out).blocks) > 15
+
+
+def test_convert_rejects_unknown(tmp_path):
+    import pytest
+
+    from docformat.convert import ensure_docx
+
+    bad = tmp_path / "x.xyz"
+    bad.write_text("data")
+    with pytest.raises(ValueError, match="Unsupported input type"):
+        ensure_docx(bad, tmp_path)

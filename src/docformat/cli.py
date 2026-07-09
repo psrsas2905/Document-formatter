@@ -14,6 +14,7 @@ import typer
 
 from . import apply as _apply
 from . import classify as _classify
+from . import convert as _convert
 from . import classify_ai as _classify_ai
 from . import elements as _elements
 from . import export as _export
@@ -69,7 +70,11 @@ def format(
     apply_field_values(profile, _parse_set_options(set_field))
     typer.echo(f"Template profile: {profile.name} (template: {profile.template_file})")
 
-    doc = _ingest.ingest(input)
+    source = _convert.ensure_docx(input, out / "_converted")
+    if source != input:
+        typer.echo(f"Converted {input.suffix} input -> {source.name}")
+
+    doc = _ingest.ingest(source)
     doc = _classify_ai.classify_ai(doc) if ai else _classify.classify(doc)
 
     styled = _apply.apply_styles(doc, profile, out / (input.stem + "_formatted.docx"))

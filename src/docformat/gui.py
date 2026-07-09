@@ -22,6 +22,7 @@ from pathlib import Path
 
 from . import apply as _apply
 from . import classify as _classify
+from . import convert as _convert
 from . import classify_ai as _classify_ai
 from . import elements as _elements
 from . import export as _export
@@ -125,6 +126,7 @@ class _Handler(BaseHTTPRequestHandler):
         use_ai = fields.get("ai", (None, b"0"))[1] == b"1"
         want_pdf = fields.get("pdf", (None, b"1"))[1] == b"1"
 
+        src_path = _convert.ensure_docx(src_path, session)
         doc = _ingest.ingest(src_path)
         doc = _classify_ai.classify_ai(doc) if use_ai else _classify.classify(doc)
 

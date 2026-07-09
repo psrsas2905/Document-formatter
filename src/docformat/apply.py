@@ -26,25 +26,51 @@ def apply_styles(doc: Document, profile: TemplateProfile, out_path: str | Path) 
 
     out = docx.Document(str(template_path))
     _clear_body(out)
-    available = {s.name for s in out.styles}
+    # Resolve style OBJECTS by UI name and style id. Assigning the object (not
+    # the name) sidesteps python-docx's builtin-name translation, which fails
+    # on real-world templates whose styles carry nonstandard internal names.
+    styles = _paragraph_styles(out)
 
+    missing: dict[str, int] = {}
     for block in doc.blocks:
-        style_name = _style_for_block(block, profile, available)
-        if style_name not in available:
-            raise ValueError(
-                f"Style {style_name!r} (for {block.label.value}) not found in "
-                f"template {template_path}. The template is the source of truth — "
-                "fix the profile's style_map or the template."
-            )
+        style_name = _style_for_block(block, profile, set(styles))
+        style = styles.get(style_name)
+        if style is None:
+            # Real-world templates often lack some mapped styles. Don't invent a
+            # replacement: emit the paragraph unstyled (the template's document
+            # defaults apply) and put the mismatch in the QA report.
+            missing[style_name] = missing.get(style_name, 0) + 1
         text = block.text
         if block.label is BlockType.LIST_ITEM:
             text = LIST_MARKER_RE.sub("", text)
-        out.add_paragraph(text, style=style_name)
+        para = out.add_paragraph(text)
+        if style is not None:
+            para.style = style
+
+    for style_name, count in missing.items():
+        doc.notes.append(
+            f"Profile maps to style {style_name!r} but the template does not define "
+            f"it — {count} paragraph(s) were left on the template's default "
+            "formatting. Add the style to the template or fix the profile's style_map."
+        )
 
     if doc.title:
         out.core_properties.title = doc.title
     out.save(out_path)
     return out_path
+
+
+def _paragraph_styles(out) -> dict:
+    """Paragraph styles keyed by UI name and by style id (first definition wins,
+    so duplicate entries in malformed templates resolve deterministically)."""
+    from docx.enum.style import WD_STYLE_TYPE
+
+    styles: dict = {}
+    for s in out.styles:
+        if s.type == WD_STYLE_TYPE.PARAGRAPH:
+            styles.setdefault(s.name, s)
+            styles.setdefault(s.style_id, s)
+    return styles
 
 
 def _style_for_block(block, profile: TemplateProfile, available: set[str]) -> str:

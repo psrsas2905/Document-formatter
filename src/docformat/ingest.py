@@ -66,6 +66,8 @@ def _hints_for(para, text: str, leading_tabs: int) -> FormatHints:
     letters = [c for c in text if c.isalpha()]
     all_caps = bool(letters) and text.upper() == text
 
+    # para.style is None when the paragraph references a style id the document
+    # never defines (seen in real-world templates) — treat as unstyled.
     style_name = para.style.name if para.style is not None else None
     existing_style = style_name if style_name and style_name != "Normal" else None
 

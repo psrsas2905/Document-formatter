@@ -53,3 +53,6 @@ class Document:
     blocks: list[Block] = field(default_factory=list)
     title: str | None = None
     source_path: str | None = None
+    # Pipeline-level warnings for the QA report (e.g. profile maps a label to a
+    # style the template doesn't define). Human-readable sentences.
+    notes: list[str] = field(default_factory=list)

@@ -66,18 +66,36 @@ def _apply_page_setup(doc, page: dict) -> None:
 
 
 def _write_header_footer(doc, raw: dict, tokens: dict) -> None:
+    from .apply import _paragraph_styles
+
     header_spec = raw.get("header", {})
     footer_spec = raw.get("footer", {})
+    styles = _paragraph_styles(doc)
+
+    # Placeholder substitution inside the template's OWN header/footer content,
+    # e.g. replace "[Document Title]" with the real title. Configured per
+    # profile under header.replace / footer.replace.
+    replacements = {**header_spec.get("replace", {}), **footer_spec.get("replace", {})}
+    if replacements:
+        from docx.text.paragraph import Paragraph
+
+        for section in doc.sections:
+            for part in (section.header, section.footer,
+                         section.first_page_header, section.first_page_footer):
+                # Walk every paragraph in the part, including those nested in
+                # tables/text boxes — brand headers are often laid out that way.
+                for p_el in part._element.iter(qn("w:p")):
+                    _replace_placeholders(Paragraph(p_el, part), replacements, tokens)
 
     for section in doc.sections:
         if header_spec.get("text"):
             _append_marginal_text(
-                section.header, header_spec["text"], tokens, style_hint="Header",
+                section.header, header_spec["text"], tokens, style=styles.get("Header"),
                 align=WD_ALIGN_PARAGRAPH.RIGHT,
             )
         if footer_spec.get("text"):
             _append_marginal_text(
-                section.footer, footer_spec["text"], tokens, style_hint="Footer",
+                section.footer, footer_spec["text"], tokens, style=styles.get("Footer"),
                 align=WD_ALIGN_PARAGRAPH.CENTER,
             )
         if not header_spec.get("show_on_first_page", True):
@@ -88,15 +106,34 @@ def _write_header_footer(doc, raw: dict, tokens: dict) -> None:
     doc.settings.element  # ensure settings part exists before saving
 
 
-def _append_marginal_text(container, text: str, tokens: dict, style_hint: str, align) -> None:
+def _replace_placeholders(para, replacements: dict, tokens: dict) -> None:
+    """Swap template placeholders (e.g. '[Document Title]') for token-expanded
+    values inside existing header/footer runs, keeping the runs' formatting."""
+    for placeholder, value in replacements.items():
+        if placeholder not in para.text:
+            continue
+        for token, actual in tokens.items():
+            value = value.replace(token, actual)
+        replaced = False
+        for run in para.runs:
+            if placeholder in run.text:  # placeholder within a single run
+                run.text = run.text.replace(placeholder, value)
+                replaced = True
+        if not replaced:  # placeholder split across runs: rewrite the first run
+            text = para.text.replace(placeholder, value)
+            for run in para.runs[1:]:
+                run.text = ""
+            if para.runs:
+                para.runs[0].text = text
+
+
+def _append_marginal_text(container, text: str, tokens: dict, style, align) -> None:
     """Append one paragraph of profile text to a header/footer, preserving
     whatever the template already put there (e.g. the brand logo)."""
     container.is_linked_to_previous = False
     para = container.add_paragraph()
-    try:
-        para.style = style_hint
-    except KeyError:
-        pass
+    if style is not None:
+        para.style = style
     para.alignment = align
 
     for token in tokens:
@@ -132,7 +169,7 @@ def _auto_number_captions(doc, profile) -> None:
     caption_style = profile.style_map.get("Caption", "Caption")
     counters: dict[str, int] = {}
     for para in doc.paragraphs:
-        if para.style.name != caption_style:
+        if para.style is None or para.style.name != caption_style:
             continue
         m = CAPTION_NUM_RE.match(para.text)
         if not m:
@@ -186,7 +223,7 @@ def _insert_field_block(doc, anchor, title: str, instr: str):
     """
     body = doc.element.body
 
-    title_p = _make_paragraph(doc, title, _pick_style(doc, "TOC Heading", "Heading 1"))
+    title_p = _make_paragraph(doc, title, _pick_style(doc, "TOC Heading"))
     field_p = OxmlElement("w:p")
     fld = OxmlElement("w:fldSimple")
     fld.set(qn("w:instr"), f" {instr} ")
@@ -206,12 +243,24 @@ def _insert_field_block(doc, anchor, title: str, instr: str):
     return field_p
 
 
-def _make_paragraph(doc, text: str, style_name: str):
-    para = doc.add_paragraph(text, style=style_name)
+def _make_paragraph(doc, text: str, style):
+    para = doc.add_paragraph(text)
+    if style is not None:
+        para.style = style  # style OBJECT — survives nonstandard internal names
     para._p.getparent().remove(para._p)
     return para._p
 
 
-def _pick_style(doc, preferred: str, fallback: str) -> str:
-    names = {s.name for s in doc.styles}
-    return preferred if preferred in names else fallback
+def _pick_style(doc, preferred: str, fallback: str | None = None):
+    """Style object for the first defined name, or None (plain paragraph).
+
+    Falling back to a heading style would put TOC/LOF titles inside the TOC
+    itself, so templates without the preferred style get an unstyled title.
+    """
+    from .apply import _paragraph_styles
+
+    styles = _paragraph_styles(doc)
+    style = styles.get(preferred)
+    if style is None and fallback is not None:
+        style = styles.get(fallback)
+    return style

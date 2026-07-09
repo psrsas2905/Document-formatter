@@ -38,6 +38,12 @@ def write_report(doc: Document, out_path: str | Path) -> Path:
         f"Blocks processed: {total} — {auto} classified confidently, "
         f"{len(uncertain)} need review (threshold {CONFIDENCE_THRESHOLD}).",
         "",
+    ]
+    if doc.notes:
+        lines += ["## Template / profile warnings", ""]
+        lines += [f"- {note}" for note in doc.notes]
+        lines += [""]
+    lines += [
         "## Blocks needing human review",
         "",
     ]

@@ -1,0 +1,43 @@
+# Template profile for the RedLotus Pharmtech master template.
+# Mapped to the styles that template actually defines. It has no Body/Caption/
+# Quote styles — those labels fall back to the template's default formatting
+# and the mismatch is listed in the QA report.
+
+name: "RedLotus Pharmtech Standard"
+
+template_file: "templates/RedLotus_Master_Template.docx"
+
+style_map:
+  Heading1: "Heading 1"
+  Heading2: "Heading 2"
+  Heading3: "Heading 3"
+  Body:     "Normal"          # not defined in the template -> default formatting
+  Caption:  "Strong"          # closest defined style for caption lines
+  ListItem: "List Paragraph"
+  Quote:    "Normal"          # not defined in the template -> default formatting
+
+# No `page:` section — keep the template's own A4 geometry and margins.
+
+# The template's header already carries the RedLotus logo banner; its footer
+# carries the company name. Only page numbers are appended.
+footer:
+  text: "Page {page} of {pages}"
+
+toc:
+  enabled: true
+  title: "Table of Contents"
+  max_level: 3
+
+list_of_figures:
+  enabled: true
+  title: "List of Figures"
+
+output:
+  filename: "{basename}_v{version}_{date}"
+  version: "1.0"
+  export_pdf: true
+
+# Replace the template's own header placeholder with the document title.
+header:
+  replace:
+    "[Document Title]": "{doc_title}"

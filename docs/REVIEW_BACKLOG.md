@@ -7,34 +7,35 @@ remains, in priority order.
 
 ## Tier 2 — deployment & dependability (before team rollout)
 
-- [ ] LibreOffice discovery: search default install paths on Windows
+- [x] LibreOffice discovery: search default install paths on Windows
       (`C:\Program Files\LibreOffice\program\soffice.exe`) and macOS
       (`/Applications/LibreOffice.app/Contents/MacOS/soffice`) + a
       `DOCFORMAT_SOFFICE` env override (`export.py`, `convert.py`).
-- [ ] `convert._via_soffice`: isolate with `-env:UserInstallation` like
+- [x] `convert._via_soffice`: isolate with `-env:UserInstallation` like
       `export.py` does (fails when desktop LibreOffice is open).
-- [ ] Stale-output masking: unlink the target PDF/docx before invoking
+- [x] Stale-output masking: unlink the target PDF/docx before invoking
       soffice in `export.py` and `convert.py`.
-- [ ] Subprocess timeouts + surface stderr in error messages.
-- [ ] Logging: rotating file log in a per-user app-data dir; log tracebacks
+- [x] Subprocess timeouts + surface stderr in error messages.
+- [x] Logging: rotating file log in a per-user app-data dir; log tracebacks
       and soffice stderr; keep friendly client messages.
-- [ ] Friendly CLI/GUI errors for corrupt docx, missing LibreOffice, busy port
+- [x] Friendly CLI/GUI errors for corrupt docx, missing LibreOffice, busy port
       (retry on port 0 or point at the running instance).
-- [ ] GUI hardening: validate Host header + Origin on POST (CSRF/DNS-rebinding),
+- [x] GUI hardening: validate Host header + Origin on POST (CSRF/DNS-rebinding),
       cap upload size (~100 MB), evict/delete session dirs (LRU + shutdown
       cleanup), socket timeouts.
-- [ ] Packaging: commit `docformat.spec` (currently gitignored/untracked!),
+- [x] Packaging (except signing): commit `docformat.spec` (currently gitignored/untracked!),
       un-drift it from `build_exe.sh` (spec bundles only the example profile),
       disable UPX, Windows path-separator handling, CI matrix
-      (win/mac/linux build + pytest), code signing / notarization.
-- [ ] `docformat --version`, CHANGELOG.md, real author in pyproject.
-- [ ] Windows `.txt` encoding: try utf-8 then cp1252 in `convert._from_text`.
-- [ ] `_replace_placeholders` cross-run fallback duplicates hyperlink text and
+      (win/mac/linux build + pytest) — DONE. Code signing / notarization
+      still requires certificates (procurement lead time).
+- [x] `docformat --version`, CHANGELOG.md, real author in pyproject.
+- [x] Windows `.txt` encoding: try utf-8 then cp1252 in `convert._from_text`.
+- [x] `_replace_placeholders` cross-run fallback duplicates hyperlink text and
       collapses run formatting (`elements.py`) — rebuild only spanned runs.
-- [ ] `_front_matter_anchor` hardcodes "Heading 1" — use the profile's mapped
+- [x] `_front_matter_anchor` hardcodes "Heading 1" — use the profile's mapped
       H1 style name; when anchorless with a kept cover, insert after the cover.
-- [ ] `_auto_number_captions` drops non-text runs when rebuilding captions.
-- [ ] Profile validation at load (missing keys, unknown keys, style_map
+- [x] `_auto_number_captions` drops non-text runs when rebuilding captions.
+- [x] Profile validation at load (missing keys, unknown keys, style_map
       completeness) with friendly errors.
 
 ## Tier 3 — versatility (post-pilot, by user feedback)

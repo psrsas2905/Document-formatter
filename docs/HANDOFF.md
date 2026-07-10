@@ -86,7 +86,7 @@ bash scripts/build_exe.sh   # -> dist/docformat (rebuild after changes)
 ## Expert review (2026-07-10)
 
 A four-perspective review ran (correctness, security, deployment, product).
-**Tier 1 (silent content loss) is FIXED**: tracked changes auto-accepted with a
+**Tier 1 (silent content loss) is FIXED, Tier 2 (deployment hardening) is DONE except code signing (needs certificates)**: tracked changes auto-accepted with a
 QA note, fields frozen to cached text, content controls unwrapped, native
 w:numPr lists detected, hyperlinks carried (external) or QA-counted (internal),
 endnotes carried as footnotes, comments listed in QA, table relationship ids

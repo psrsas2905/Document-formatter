@@ -30,7 +30,7 @@ source.docx ─▶ ingest ─▶ classify ─▶ apply ─▶ elements ─▶ ex
 ## Requirements
 
 - Python 3.10+
-- [LibreOffice](https://www.libreoffice.org/) (for offline PDF export) — the `soffice` binary must be on your PATH
+- [LibreOffice](https://www.libreoffice.org/) (for offline PDF export and .doc/.odt/.rtf input) — found automatically in default install locations on Windows/macOS/Linux, or set `DOCFORMAT_SOFFICE=/path/to/soffice`
 - *(optional)* [Ollama](https://ollama.com/) with a small instruct model, for the AI-assisted classifier
 
 ## Install (dev)
@@ -90,9 +90,16 @@ results, and see at a glance which blocks need a human look.
 bash scripts/build_exe.sh   # -> dist/docformat (single file)
 ```
 
-The executable bundles Python, python-docx, the example profile and the demo
-template; only LibreOffice is still needed on the target machine for PDF
-export. Build on each OS you ship to (PyInstaller doesn't cross-compile).
+The build definition is `docformat.spec` (UPX off to avoid antivirus false
+positives); CI builds Windows/macOS/Linux artifacts on every push. The
+executable bundles Python, python-docx, all profiles and the demo template;
+only LibreOffice is still needed on the target machine for PDF export. Build
+on each OS you ship to (PyInstaller doesn't cross-compile), and code-sign /
+notarize binaries before distributing them to end users.
+
+Troubleshooting: errors show a one-line message; full details land in a log
+file (Windows `%LOCALAPPDATA%\docformat\logs`, macOS `~/Library/Logs/docformat`,
+Linux `~/.local/state/docformat`). `docformat --version` reports the build.
 
 ## Content preservation
 

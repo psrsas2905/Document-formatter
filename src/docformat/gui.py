@@ -22,6 +22,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from . import __version__
 from . import apply as _apply
 from . import classify as _classify
 from . import convert as _convert
@@ -96,7 +97,8 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(403, "text/plain", b"forbidden host")
             return
         if self.path in ("/", "/index.html"):
-            self._send(200, "text/html; charset=utf-8", _ASSET.read_bytes())
+            page = _ASSET.read_bytes().replace(b"__VERSION__", __version__.encode())
+            self._send(200, "text/html; charset=utf-8", page)
             return
         if self.path == "/favicon.ico":
             svg = (

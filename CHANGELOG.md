@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased — Tier 4 (real-world readiness)
+
+- **GUI honesty & polish**: the local web app now shows the active template
+  profile up front; disables PDF export with a note when LibreOffice isn't
+  installed; annotates the AI option honestly when Ollama isn't running; shows
+  an elapsed-time counter during formatting; and lists each flagged block's
+  index (matching the `--overrides` plan) in the review table.
+- **Honest AI fallback**: requesting AI assist when no local Ollama model is
+  reachable now records a QA note (CLI and GUI) instead of silently presenting
+  rule-based labels as AI-reviewed.
+- **QA anchors**: the QA report and the GUI review table now show the nearest
+  heading above each flagged block, so a reviewer can locate it by section.
+- **Word-native ordered lists**: ribbon-numbered lists (`w:numPr` with a
+  decimal/letter/roman format) now map to `ListNumber`, not bullets — resolved
+  from `numbering.xml`.
+- **Manual page breaks** (Ctrl+Enter / `pageBreakBefore`) are carried through;
+  mid-document **section breaks** and **landscape** pages are QA-flagged rather
+  than reconstructed (the template owns page setup).
+- **Highlighter marks** are preserved as inline author annotations.
+- **Text-box content** is now inlined into the document flow in reading order
+  (previously dropped and only QA-flagged), with a note to check placement.
+
 ## Unreleased — Tier 3 (versatility)
 
 Post-pilot versatility features, built on the v1 pipeline:

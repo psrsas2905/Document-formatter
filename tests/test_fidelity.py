@@ -124,9 +124,108 @@ def test_native_numpr_list_detected(tmp_path, profile):
 
     doc = classify(ingest(src_path))
     items = [b for b in doc.blocks if b.label is BlockType.LIST_ITEM]
-    assert len(items) == 2
+    assert len(items) == 2  # numId 1 is a bullet list in the default template
     assert all(b.confidence >= CONFIDENCE_THRESHOLD for b in items)
     assert items[1].hints.list_level == 1
+
+
+def test_native_ordered_list_maps_to_listnumber(tmp_path, profile):
+    """A ribbon 'numbered list' (decimal numFmt) becomes ListNumber, not a
+    bullet — resolved from numbering.xml, not the text."""
+    from docformat.ingest import _numbering_formats
+
+    src = docx.Document()
+    decimal_nid = next(
+        nid for (nid, ilvl), fmt in _numbering_formats(src).items()
+        if ilvl == "0" and fmt == "decimal"
+    )
+    p = src.add_paragraph("First numbered step", style="List Paragraph")
+    p._p.get_or_add_pPr().append(parse_xml(
+        f'<w:numPr {W}><w:ilvl w:val="0"/><w:numId w:val="{decimal_nid}"/></w:numPr>'
+    ))
+    src_path = tmp_path / "src.docx"
+    src.save(src_path)
+
+    doc = classify(ingest(src_path))
+    item = next(b for b in doc.blocks if b.text == "First numbered step")
+    assert item.label is BlockType.LIST_NUMBER
+    assert item.hints.has_numbering and item.hints.list_ordered
+
+
+def test_manual_page_break_carried(tmp_path, profile):
+    """A Ctrl+Enter break and a pageBreakBefore paragraph both survive to output."""
+    from docx.enum.text import WD_BREAK
+
+    src = docx.Document()
+    src.add_paragraph("Page one.")
+    src.add_paragraph("End of page one.").add_run().add_break(WD_BREAK.PAGE)
+    src.add_paragraph("Top of page two.")
+    forced = src.add_paragraph("Forced onto a new page.")
+    forced.paragraph_format.page_break_before = True
+    src_path = tmp_path / "src.docx"
+    src.save(src_path)
+
+    doc = classify(ingest(src_path))
+    by_text = {b.text: b for b in doc.blocks}
+    assert by_text["Top of page two."].page_break_before
+    assert by_text["Forced onto a new page."].page_break_before
+    assert not by_text["Page one."].page_break_before
+
+    out = apply_styles(doc, profile, tmp_path / "out.docx")
+    result = docx.Document(str(out))
+    broken = {p.text for p in result.paragraphs if p.paragraph_format.page_break_before}
+    assert {"Top of page two.", "Forced onto a new page."} <= broken
+
+
+def test_section_break_and_landscape_flagged(tmp_path, profile):
+    """Section breaks aren't carried (template owns page setup) but are QA-noted,
+    calling out landscape pages specifically."""
+    src = docx.Document()
+    src.add_paragraph("Portrait body.")
+    sect_p = parse_xml(
+        f"<w:p {W}><w:pPr><w:sectPr>"
+        '<w:pgSz w:w="16838" w:h="11906" w:orient="landscape"/>'
+        "</w:sectPr></w:pPr></w:p>"
+    )
+    src.element.body.insert(len(src.element.body) - 1, sect_p)
+    src.add_paragraph("Landscape body.")
+    src_path = tmp_path / "src.docx"
+    src.save(src_path)
+
+    doc = ingest(src_path)
+    note = next((n for n in doc.notes if "section break" in n), None)
+    assert note is not None and "landscape" in note.lower()
+
+
+def test_text_box_content_carried(tmp_path, profile):
+    """Text inside a text box is inlined into the flow (was silently dropped),
+    in reading order, and QA-noted."""
+    wps = "http://schemas.microsoft.com/office/word/2010/wordprocessingShape"
+    src = docx.Document()
+    src.add_paragraph("Body before the callout.")
+    run = src.add_paragraph().add_run()
+    run._element.append(parse_xml(
+        f'<w:drawing {W} '
+        'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" '
+        'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
+        f'xmlns:wps="{wps}"><wp:inline><a:graphic>'
+        f'<a:graphicData uri="{wps}"><wps:wsp><wps:txbx><w:txbxContent>'
+        "<w:p><w:r><w:t>Note inside the text box.</w:t></w:r></w:p>"
+        "</w:txbxContent></wps:txbx></wps:wsp></a:graphicData></a:graphic></wp:inline></w:drawing>"
+    ))
+    src.add_paragraph("Body after the callout.")
+    src_path = tmp_path / "src.docx"
+    src.save(src_path)
+
+    doc, out, _ = _pipeline(src_path, profile, tmp_path)
+    texts = [b.text for b in doc.blocks]
+    assert texts == [
+        "Body before the callout.",
+        "Note inside the text box.",
+        "Body after the callout.",
+    ]
+    assert any("text box" in n and "inlined" in n for n in doc.notes)
+    assert any("Note inside the text box." == p.text for p in out.paragraphs)
 
 
 def test_hyperlink_url_carried(tmp_path, profile):

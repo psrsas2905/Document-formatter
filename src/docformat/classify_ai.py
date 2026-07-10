@@ -50,7 +50,13 @@ def classify_ai(doc: Document) -> Document:
 
     model = _pick_model()
     if model is None:
-        return doc  # Ollama absent/unusable -> heuristics stand as-is
+        # Requested but unusable: say so (QA report + GUI) instead of silently
+        # passing off heuristic labels as AI-reviewed.
+        doc.notes.append(
+            "AI assist was requested but no local Ollama model was reachable — "
+            "the rule-based classifier was used instead."
+        )
+        return doc  # heuristics stand as-is
 
     prev_label = "None"
     for block in doc.blocks:

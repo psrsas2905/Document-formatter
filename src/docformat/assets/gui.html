@@ -121,6 +121,15 @@
   .warnings { margin: 0 0 14px; padding: 12px 14px 12px 30px; background: #fdf3e7;
               border-radius: 10px; font-size: 13.5px; color: var(--warn); }
   .warnings li { margin: 3px 0; }
+  .prof {
+    font-size: 13px; color: var(--muted); margin: -2px 0 16px;
+    padding-bottom: 12px; border-bottom: 1px solid var(--line);
+  }
+  .prof b { color: var(--ink); font-weight: 600; }
+  .cap { font-size: 12px; color: var(--muted); }
+  .cap.ok { color: var(--ok); }
+  .cap.warn { color: var(--warn); }
+  td.idx { font-variant-numeric: tabular-nums; color: var(--muted); width: 42px; }
   footer { text-align: center; color: var(--muted); font-size: 12.5px; padding: 10px 0 30px; }
 </style>
 </head>
@@ -143,6 +152,7 @@
   </div>
 
   <form id="form" class="card">
+    <div class="prof">Template profile: <b id="prof-name">…</b></div>
     <div class="grid2">
       <div>
         <h2>Draft document</h2>
@@ -168,8 +178,8 @@
     <button type="button" class="ghost" id="add-field">+ Add field</button>
 
     <div class="row">
-      <label class="check"><input type="checkbox" id="opt-pdf" checked> Export tagged PDF</label>
-      <label class="check"><input type="checkbox" id="opt-ai"> Use local AI assist (Ollama)</label>
+      <label class="check"><input type="checkbox" id="opt-pdf" checked> Export tagged PDF<span class="cap" id="pdf-cap"></span></label>
+      <label class="check"><input type="checkbox" id="opt-ai"> Use local AI assist (Ollama)<span class="cap" id="ai-cap"></span></label>
     </div>
 
     <button class="primary" id="go" type="submit" disabled>Format document</button>
@@ -186,8 +196,10 @@
     <div id="qa-section">
       <h2 style="margin-top:18px">Needs your review</h2>
       <div id="qa-table"></div>
-      <p class="qa-note">These blocks were classified with low confidence. Open the formatted
-      document, check their style, and fix in Word if needed. Full details are in the QA report.</p>
+      <p class="qa-note">These blocks were classified with low confidence. The <b>#</b> is each
+      block's position in the document (the same index the <code>--overrides</code> plan uses).
+      Open the formatted document, check their style, and fix in Word if needed. Full details are
+      in the QA report.</p>
     </div>
   </div>
 </main>
@@ -205,6 +217,22 @@
   function refreshGo() {
     $("go").disabled = !drops[0].input.files.length;
   }
+
+  // Tell the writer up front which profile is active and whether PDF export
+  // (LibreOffice) and AI assist (Ollama) can actually run on this machine.
+  fetch("/meta").then((r) => r.json()).then((meta) => {
+    $("prof-name").textContent = meta.profile;
+    if (!meta.pdf_available) {
+      $("opt-pdf").checked = false;
+      $("opt-pdf").disabled = true;
+      const cap = $("pdf-cap");
+      cap.textContent = " — LibreOffice not found on this machine";
+      cap.classList.add("warn");
+    }
+    const aiCap = $("ai-cap");
+    if (meta.ai_available) { aiCap.textContent = " — Ollama detected"; aiCap.classList.add("ok"); }
+    else { aiCap.textContent = " — Ollama not detected; the rule-based classifier will be used"; }
+  }).catch(() => { $("prof-name").textContent = "(could not load profile)"; });
 
   drops.forEach(({ drop, input }) => {
     const msg = drop.querySelector(".msg");
@@ -263,10 +291,18 @@
 
     go.disabled = true;
     go.innerHTML = "<span class='spinner'></span>Formatting…";
-    status.className = "busy"; status.textContent =
-      $("opt-pdf").checked ? "Applying template styles and exporting PDF (LibreOffice)…"
-                           : "Applying template styles…";
+    status.className = "busy";
     $("results").style.display = "none";
+
+    // Single POST runs the whole pipeline, so show an elapsed timer (PDF export
+    // via LibreOffice can take 10-30s) rather than a frozen "please wait".
+    const base = $("opt-pdf").checked
+      ? "Applying template styles and exporting the PDF (LibreOffice)…"
+      : "Applying template styles…";
+    const t0 = Date.now();
+    const tick = () => { status.textContent = base + "  (" + Math.round((Date.now() - t0) / 1000) + "s)"; };
+    tick();
+    const timer = setInterval(tick, 1000);
 
     try {
       const resp = await fetch("/format", { method: "POST", body: fd });
@@ -277,6 +313,7 @@
     } catch (err) {
       status.className = "error"; status.textContent = "Failed: " + err.message;
     } finally {
+      clearInterval(timer);
       go.disabled = false; go.textContent = "Format document"; refreshGo();
     }
   });
@@ -321,10 +358,12 @@
     else {
       qs.style.display = "";
       const rows = data.review.map((r) =>
-        "<tr><td>" + esc(r.label) + "</td><td class='conf'>" + r.confidence.toFixed(2) +
+        "<tr><td class='idx'>" + (r.index != null ? "#" + r.index : "") + "</td><td>" +
+        esc(r.anchor || "—") + "</td><td>" +
+        esc(r.label) + "</td><td class='conf'>" + r.confidence.toFixed(2) +
         "</td><td>" + esc(r.text) + "</td></tr>").join("");
       $("qa-table").innerHTML =
-        "<table><thead><tr><th>Assigned style</th><th>Confidence</th><th>Text</th></tr></thead><tbody>"
+        "<table><thead><tr><th>#</th><th>Under heading</th><th>Assigned style</th><th>Confidence</th><th>Text</th></tr></thead><tbody>"
         + rows + "</tbody></table>";
     }
     $("results").style.display = "block";

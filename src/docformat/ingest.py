@@ -89,8 +89,9 @@ class _Stats:
             out.append(f"{self.endnotes} endnote(s) were carried over as footnotes.")
         if self.textboxes:
             out.append(
-                f"{self.textboxes} text box(es) containing text were dropped — "
-                "copy their content across manually."
+                f"{self.textboxes} text box(es) were inlined into the document flow "
+                "in reading order — check their placement (floating position is not "
+                "preserved)."
             )
         if self.vml_images:
             out.append(
@@ -118,8 +119,9 @@ def ingest(source_path: str | Path) -> Document:
     stats = _Stats()
     stats.comments = _comment_texts(src)
 
+    numbering = _numbering_formats(src)
     blocks: list[Block] = []
-    _walk_body(src.element.body, src, blocks, notes_ctx, stats)
+    _walk_body(src.element.body, src, blocks, notes_ctx, stats, numbering)
 
     doc = Document(
         blocks=blocks,
@@ -127,33 +129,98 @@ def ingest(source_path: str | Path) -> Document:
         source_path=str(source_path),
     )
     doc.notes.extend(stats.notes())
+    doc.notes.extend(_section_notes(src.element.body))
     return doc
 
 
-def _walk_body(container, src, blocks: list[Block], notes_ctx, stats: _Stats) -> None:
+def _section_notes(body) -> list[str]:
+    """QA notes for structural section features the template can't carry:
+    mid-document section breaks and landscape pages. Page setup is the
+    template's job, so these are flagged rather than reconstructed."""
+    notes: list[str] = []
+    # Paragraph-level sectPr = a section break; the final body-level sectPr is
+    # the document's own and is not a break.
+    breaks = len(body.findall(f"{qn('w:p')}/{qn('w:pPr')}/{qn('w:sectPr')}"))
+    landscape = any(
+        pg_sz.get(qn("w:orient")) == "landscape" for pg_sz in body.iter(qn("w:pgSz"))
+    )
+    if breaks:
+        msg = (
+            f"{breaks} section break(s) in the source were not carried — the "
+            "template's page setup applies to the whole document."
+        )
+        if landscape:
+            msg += (
+                " One or more sections were landscape (e.g. a wide table); "
+                "re-create the landscape page(s) in Word if needed."
+            )
+        notes.append(msg)
+    return notes
+
+
+def _outer_textboxes(el) -> list:
+    """Text boxes anchored in this element, excluding boxes nested inside another
+    (those are reached when their own host paragraph is walked)."""
+    return [
+        tx for tx in el.iter(W_TXBX)
+        if not any(anc.tag == W_TXBX for anc in tx.iterancestors())
+    ]
+
+
+def _walk_body(container, src, blocks: list[Block], notes_ctx, stats: _Stats, numbering) -> None:
     """Collect blocks from a body-level container, descending into content
     controls (w:sdt) so their wrapped paragraphs/tables are not lost."""
     from docx.table import Table
     from docx.text.paragraph import Paragraph
 
+    # A manual page break attaches to the NEXT emitted block. Break-only
+    # paragraphs are otherwise dropped as empty, so the flag has to survive them.
+    pending_break = False
     for el in container:
         if el.tag == qn("w:p"):
             para = Paragraph(el, src)
+            pPr = el.find(qn("w:pPr"))
+            has_pbb = pPr is not None and pPr.find(qn("w:pageBreakBefore")) is not None
+            # Page-break runs in THIS paragraph's flow — not ones nested in a
+            # text box (those are handled when the box is walked).
+            has_break_run = any(
+                br.get(qn("w:type")) == "page"
+                and not any(a.tag == W_TXBX for a in br.iterancestors())
+                for br in el.iter(qn("w:br"))
+            )
             segments = _segments_for(el, para, src, notes_ctx, stats)
             text = "".join(s.text for s in segments if s.kind in ("text", "object"))
             leading_tabs = len(text) - len(text.lstrip("\t"))
             text = text.strip()
-            if not text and not any(s.kind != "text" for s in segments):
-                continue
-            blocks.append(
-                Block(text=text, hints=_hints_for(para, text, leading_tabs), segments=segments)
-            )
+            break_before = pending_break or has_pbb
+            # An inline break pushes the new page onto whatever follows.
+            pending_break = has_break_run
+            if text or any(s.kind != "text" for s in segments):
+                blocks.append(Block(
+                    text=text,
+                    hints=_hints_for(para, text, leading_tabs, numbering),
+                    segments=segments,
+                    page_break_before=break_before,
+                ))
+            else:
+                pending_break = pending_break or break_before  # keep it for the next block
+            # Text-box content is anchored in this paragraph but not part of its
+            # run text — inline it into the flow so it isn't silently lost. Done
+            # even for an otherwise-empty host paragraph.
+            for box in _outer_textboxes(el):
+                before = len(blocks)
+                _walk_body(box, src, blocks, notes_ctx, stats, numbering)
+                if len(blocks) > before:
+                    stats.textboxes += 1
         elif el.tag == qn("w:tbl"):
-            blocks.append(_table_block(Table(el, src), src))
+            block = _table_block(Table(el, src), src)
+            block.page_break_before = pending_break
+            pending_break = False
+            blocks.append(block)
         elif el.tag == qn("w:sdt"):
             content = el.find(qn("w:sdtContent"))
             if content is not None:
-                _walk_body(content, src, blocks, notes_ctx, stats)
+                _walk_body(content, src, blocks, notes_ctx, stats, numbering)
 
 
 # --- inline segments ---------------------------------------------------------
@@ -240,10 +307,8 @@ def _run_segments(r_el, para, src, notes_ctx, stats: _Stats, link) -> list[Segme
         segments.append(Segment(kind="object", text=run.text))
         return segments
 
-    # Text boxes and legacy VML images can't be carried — count for QA.
-    for txbx in r_el.iter(W_TXBX):
-        if "".join(t.text or "" for t in txbx.iter(qn("w:t"))).strip():
-            stats.textboxes += 1
+    # Text-box content is carried separately (see _walk_body); legacy VML images
+    # still can't be carried — count for QA.
     if next(iter(r_el.iter(V_IMAGEDATA)), None) is not None:
         stats.vml_images += 1
 
@@ -284,6 +349,7 @@ def _run_segments(r_el, para, src, notes_ctx, stats: _Stats, link) -> list[Segme
                 subscript=_effective(font.subscript, style, "subscript"),
                 underline=_effective(font.underline, style, "underline"),
                 strike=_effective(font.strike, style, "strike"),
+                highlight=_highlight_of(r_el),
                 link=link,
             )
         )
@@ -304,6 +370,39 @@ def _note_texts(src, reltype: str, element: str) -> dict[str, str]:
         body = "".join(t.text or "" for t in note.iter(qn("w:t"))).strip()
         texts[note.get(qn("w:id"), "")] = body
     return texts
+
+
+def _numbering_formats(src) -> dict[tuple[str, str], str]:
+    """Map (numId, ilvl) -> numFmt ('decimal', 'bullet', 'lowerLetter', ...) by
+    resolving numbering.xml: each w:num points at a w:abstractNum, whose w:lvl
+    entries carry the w:numFmt. Empty when the document defines no numbering."""
+    try:
+        part = src.part.numbering_part
+    except (KeyError, AttributeError, NotImplementedError, ValueError):
+        return {}
+    if part is None:
+        return {}
+    root = etree.fromstring(part.blob)
+
+    abstract_fmt: dict[tuple[str, str], str] = {}
+    for anum in root.findall(qn("w:abstractNum")):
+        aid = anum.get(qn("w:abstractNumId"))
+        for lvl in anum.findall(qn("w:lvl")):
+            fmt_el = lvl.find(qn("w:numFmt"))
+            if fmt_el is not None and fmt_el.get(qn("w:val")):
+                abstract_fmt[(aid, lvl.get(qn("w:ilvl")))] = fmt_el.get(qn("w:val"))
+
+    result: dict[tuple[str, str], str] = {}
+    for num in root.findall(qn("w:num")):
+        num_id = num.get(qn("w:numId"))
+        aid_el = num.find(qn("w:abstractNumId"))
+        if num_id is None or aid_el is None:
+            continue
+        aid = aid_el.get(qn("w:val"))
+        for (a, ilvl), fmt in abstract_fmt.items():
+            if a == aid:
+                result[(num_id, ilvl)] = fmt
+    return result
 
 
 def _comment_texts(src) -> list[tuple[str, str]]:
@@ -354,7 +453,7 @@ def _table_block(table, src) -> Block:
 # --- paragraph hints -----------------------------------------------------------
 
 
-def _hints_for(para, text: str, leading_tabs: int) -> FormatHints:
+def _hints_for(para, text: str, leading_tabs: int, numbering: dict) -> FormatHints:
     """Distill a paragraph's raw formatting signals into FormatHints."""
     runs = [r for r in para.runs if r.text.strip()]
 
@@ -378,17 +477,27 @@ def _hints_for(para, text: str, leading_tabs: int) -> FormatHints:
     num_pr = para._p.find(f"{qn('w:pPr')}/{qn('w:numPr')}")
     has_numbering = num_pr is not None
     ilvl = num_pr.find(qn("w:ilvl")) if has_numbering else None
+    num_id = num_pr.find(qn("w:numId")) if has_numbering else None
 
     is_list_marker = LIST_MARKER_RE.match(text) is not None
 
     indent = para.paragraph_format.left_indent
     indent_pt = (indent.pt if indent is not None else 0.0) + leading_tabs * INDENT_PT_PER_LEVEL
     list_level = int(indent_pt // INDENT_PT_PER_LEVEL) if indent_pt > 0 else 0
+    ilvl_val = "0"
     if has_numbering and ilvl is not None:
-        list_level = int(ilvl.get(qn("w:val"), "0"))
+        ilvl_val = ilvl.get(qn("w:val"), "0")
+        list_level = int(ilvl_val)
     # "a)" / roman sub-markers imply nesting even without physical indent.
     elif is_list_marker and list_level == 0 and SUB_MARKER_RE.match(text):
         list_level = 1
+
+    # Ordered vs bullet for native lists, resolved through numbering.xml. Bullet
+    # (or unresolvable) stays False so the classifier keeps its safe default.
+    list_ordered = False
+    if has_numbering and num_id is not None:
+        fmt = numbering.get((num_id.get(qn("w:val")), ilvl_val))
+        list_ordered = fmt is not None and fmt not in ("bullet", "none")
 
     return FormatHints(
         font_size_pt=font_size_pt,
@@ -398,8 +507,22 @@ def _hints_for(para, text: str, leading_tabs: int) -> FormatHints:
         existing_style=existing_style,
         is_list_marker=is_list_marker,
         has_numbering=has_numbering,
+        list_ordered=list_ordered,
         list_level=list_level,
     )
+
+
+def _highlight_of(r_el) -> str | None:
+    """The run's highlighter colour (w:highlight val), or None. Direct run
+    formatting only — highlight is a manual mark, not a style default."""
+    rpr = r_el.find(qn("w:rPr"))
+    if rpr is None:
+        return None
+    hl = rpr.find(qn("w:highlight"))
+    if hl is None:
+        return None
+    val = hl.get(qn("w:val"))
+    return val if val and val != "none" else None
 
 
 def _effective(run_value, style, attr: str) -> bool:

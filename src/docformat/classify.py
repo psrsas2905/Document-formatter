@@ -113,9 +113,10 @@ def _classify_block(
         return BlockType.CAPTION, 0.95
 
     # 3. Word-native list numbering (w:numPr) is definitive — the ribbon list
-    #    button was used; the visible number/bullet lives in numbering.xml.
+    #    button was used; the visible number/bullet lives in numbering.xml, which
+    #    ingest resolved into ordered (-> ListNumber) vs bullet (-> ListItem).
     if h.has_numbering:
-        return BlockType.LIST_ITEM, 0.95
+        return (BlockType.LIST_NUMBER if h.list_ordered else BlockType.LIST_ITEM), 0.95
 
     size = h.font_size_pt if h.font_size_pt is not None else DEFAULT_BODY_PT
     is_short = len(text.split()) <= HEADING_MAX_WORDS and not text.rstrip().endswith(".")

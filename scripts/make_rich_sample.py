@@ -96,7 +96,9 @@ def main() -> None:
     chem.add_run("thermal budget").font.underline = True
     chem.add_run(" is fixed; the ")
     chem.add_run("old 5 W limit").font.strike = True
-    chem.add_run(" no longer applies.")
+    chem.add_run(" no longer applies. ")
+    from docx.enum.text import WD_COLOR_INDEX
+    chem.add_run("Confirm the tolerance").font.highlight_color = WD_COLOR_INDEX.YELLOW
 
     doc.save(out)
     _add_footnote(out)

@@ -26,13 +26,30 @@ def review_counts(doc: Document) -> tuple[int, int]:
     return len(doc.blocks), sum(needs_review(b) for b in doc.blocks)
 
 
+_HEADING_LABELS = {BlockType.HEADING1, BlockType.HEADING2, BlockType.HEADING3}
+
+
+def heading_anchors(doc: Document) -> list[str | None]:
+    """For each block, the text of the nearest heading *above* it (None before
+    the first heading). Lets a reviewer locate a flagged block by section
+    instead of scrolling — shared by the report and the GUI."""
+    anchors: list[str | None] = []
+    current: str | None = None
+    for block in doc.blocks:
+        anchors.append(current)  # heading in effect before this block (not itself)
+        if block.label in _HEADING_LABELS:
+            current = block.text
+    return anchors
+
+
 def write_report(doc: Document, out_path: str | Path) -> Path:
     """Write qa_report.md summarizing everything a human should double-check."""
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
+    anchors = heading_anchors(doc)
     uncertain = [
-        (i, b) for i, b in enumerate(doc.blocks, 1) if needs_review(b)
+        (i, b, anchors[i - 1]) for i, b in enumerate(doc.blocks, 1) if needs_review(b)
     ]
     jumps = _hierarchy_jumps(doc)
     alt_issues = _missing_alt_text(doc)
@@ -57,12 +74,13 @@ def write_report(doc: Document, out_path: str | Path) -> Path:
     ]
     if uncertain:
         lines += [
-            "| # | Assigned label | Confidence | Text |",
-            "|---|----------------|------------|------|",
+            "| # | Under heading | Assigned label | Confidence | Text |",
+            "|---|---------------|----------------|------------|------|",
         ]
-        for i, b in uncertain:
+        for i, b, anchor in uncertain:
+            where = _snip(anchor, 40) if anchor else "_(document start)_"
             lines.append(
-                f"| {i} | {b.label.value} | {b.confidence:.2f} | {_snip(b.text)} |"
+                f"| {i} | {where} | {b.label.value} | {b.confidence:.2f} | {_snip(b.text)} |"
             )
         lines += [
             "",

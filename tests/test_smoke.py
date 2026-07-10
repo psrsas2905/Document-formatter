@@ -155,6 +155,22 @@ def test_qa_report(tmp_path):
     text = report.read_text(encoding="utf-8")
     assert "Safety Precautions" in text  # the one deliberately ambiguous block
     assert "No level jumps detected" in text
+    # The review row is anchored to the heading it sits under.
+    assert "Under heading" in text
+    assert "| Overview | Heading3 | 0.55 | Safety Precautions |" in text
+
+
+def test_heading_anchors():
+    from docformat.classify import classify
+    from docformat.ingest import ingest
+    from docformat.qa import heading_anchors
+
+    doc = classify(ingest("samples/input_messy.docx"))
+    anchors = heading_anchors(doc)
+    assert len(anchors) == len(doc.blocks)
+    assert anchors[0] is None  # the title has no heading above it
+    safety = next(i for i, b in enumerate(doc.blocks) if b.text == "Safety Precautions")
+    assert anchors[safety] == "Overview"
 
 
 def test_export_pdf(tmp_path):

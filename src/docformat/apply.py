@@ -102,6 +102,8 @@ def _emit_paragraph(out, block, style, footnotes: FootnoteWriter) -> int:
     para = out.add_paragraph()
     if style is not None:
         para.style = style
+    if block.page_break_before:
+        para.paragraph_format.page_break_before = True
 
     segments = block.segments or [Segment(kind="text", text=block.text)]
     texts = [s for s in segments if s.kind == "text" and s.text.strip()]
@@ -146,6 +148,10 @@ def _emit_paragraph(out, block, style, footnotes: FootnoteWriter) -> int:
                     run.font.underline = True
                 if seg.strike and not uniform_strike:
                     run.font.strike = True
+                # Highlight is an author annotation, never heading decoration —
+                # carry it whenever present (not dropped on uniform paragraphs).
+                if seg.highlight:
+                    _set_highlight(run, seg.highlight)
         elif seg.kind == "math":
             para._p.append(parse_xml(seg.xml))
             lead_pending = False
@@ -167,6 +173,21 @@ def _emit_paragraph(out, block, style, footnotes: FootnoteWriter) -> int:
                 para.add_run(seg.text)
             objects += 1
     return objects
+
+
+def _set_highlight(run, value: str) -> None:
+    """Apply a highlighter colour (OOXML w:highlight) to a run.
+
+    Uses python-docx's typed setter so w:highlight lands in its correct
+    schema position within rPr (a raw append would sit after w:u/w:strike,
+    which violates the CT_RPr element order). Unknown values are skipped
+    rather than emitted as invalid XML."""
+    from docx.enum.text import WD_COLOR_INDEX
+
+    try:
+        run.font.highlight_color = WD_COLOR_INDEX.from_xml(value)
+    except (KeyError, ValueError):
+        pass
 
 
 RT_HYPERLINK = (
@@ -258,6 +279,17 @@ def _emit_table(out, block, profile: TemplateProfile, doc: Document) -> None:
 
     body = out.element.body
     sect = body.find(qn("w:sectPr"))
+    # A table can't carry pageBreakBefore itself; force it onto a new page with a
+    # leading empty paragraph that does.
+    if block.page_break_before:
+        brk = parse_xml(
+            '<w:p xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+            "<w:pPr><w:pageBreakBefore/></w:pPr></w:p>"
+        )
+        if sect is not None:
+            sect.addprevious(brk)
+        else:
+            body.append(brk)
     if sect is not None:
         sect.addprevious(tbl)
     else:

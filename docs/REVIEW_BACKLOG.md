@@ -52,15 +52,20 @@ remains, in priority order.
       colour the template governs, not clearly semantic.)
 - [x] Honor `output.filename` profile setting — `template.output_stem`.
 - [x] ListNumber block type so manual "1." lists map to `List Number`.
-- [ ] GUI: show active profile, progress during PDF export, block anchors in
-      the review table, honest signal when --ai is checked but Ollama absent.
-      (inspect-template's placeholder extraction is ready to feed GUI field
-      auto-suggestion.)
-- [ ] Sections/page breaks/landscape carried or QA-flagged; text-box content
-      carry (currently QA-flagged only); VML image conversion.
+- [x] GUI: show active profile, progress during PDF export, block anchors in
+      the review table, honest signal when --ai is checked but Ollama absent
+      (`/meta` endpoint, `gui.html`). (inspect-template's placeholder extraction
+      is still available to feed GUI field auto-suggestion — not wired yet.)
+- [x] QA report anchors (nearest heading per row) — `qa.heading_anchors`, shown
+      in the report's "Under heading" column and the GUI review table.
+- [x] Word-native (w:numPr) lists: detect ordered vs bullet from numbering.xml
+      so ribbon-numbered lists also become ListNumber — `ingest._numbering_formats`
+      + `FormatHints.list_ordered`.
+- [x] Page breaks carried; section breaks / landscape QA-flagged —
+      `ingest` page-break detection + `_section_notes`. (Text-box content carry
+      and VML image conversion are still open.)
+- [x] Highlight (font.highlight_color) carry — `Segment.highlight`.
+- [x] Text-box content carry — inlined in reading order (`ingest._outer_textboxes`).
 - [ ] CJK/RTL: char-based shortness, "。" as period, 图/表/第X章 patterns.
-- [ ] QA report anchors (nearest heading per row) or injected Word comments.
-- [ ] Highlight (font.highlight_color) carry, if pilots want author annotations.
-- [ ] Word-native (w:numPr) lists: detect ordered vs bullet from numbering.xml
-      so ribbon-numbered lists also become ListNumber (currently only typed
-      "1."/"a)" markers do).
+- [ ] Injected Word comments on flagged blocks (anchors done; comments still open).
+- [ ] VML (legacy) image conversion (still QA-flagged only).

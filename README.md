@@ -123,7 +123,10 @@ docformat gui
 Opens a local web app at `http://127.0.0.1:8765` (stdlib server, localhost
 only — nothing ever leaves the machine): drag in the draft, optionally drag in
 your organization's brand template, click **Format document**, download the
-results, and see at a glance which blocks need a human look.
+results, and see at a glance which blocks need a human look. The app shows the
+active template profile, tells you honestly whether PDF export (LibreOffice)
+and AI assist (Ollama) are available on this machine, and numbers each flagged
+block so you can find it.
 
 ### Standalone executable
 
@@ -153,8 +156,10 @@ carries through, content-intact:
 - **Footnotes** — re-attached (plain text; flagged in the QA report)
 - **Inline emphasis** — bold/italic *inside* body text survives; uniform
   whole-paragraph bold (pseudo-heading decoration) is replaced by the style
-- **Character formatting** — sub/superscript (x², H₂O) always survive; underline
-  and strikethrough are kept as inline emphasis
+- **Character formatting** — sub/superscript (x², H₂O) always survive; underline,
+  strikethrough and highlighter marks are kept as inline emphasis
+- **Manual page breaks** — intentional Ctrl+Enter / "page break before"
+  pagination is preserved (section breaks and landscape pages are QA-flagged)
 - **Ordered vs bullet lists** — "1."/"a)" lists keep their numbering (mapped to
   the template's numbered-list style), bullets stay bullets
 - MathType/OLE objects can't be carried — the QA report lists each one

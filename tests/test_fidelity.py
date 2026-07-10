@@ -124,9 +124,32 @@ def test_native_numpr_list_detected(tmp_path, profile):
 
     doc = classify(ingest(src_path))
     items = [b for b in doc.blocks if b.label is BlockType.LIST_ITEM]
-    assert len(items) == 2
+    assert len(items) == 2  # numId 1 is a bullet list in the default template
     assert all(b.confidence >= CONFIDENCE_THRESHOLD for b in items)
     assert items[1].hints.list_level == 1
+
+
+def test_native_ordered_list_maps_to_listnumber(tmp_path, profile):
+    """A ribbon 'numbered list' (decimal numFmt) becomes ListNumber, not a
+    bullet — resolved from numbering.xml, not the text."""
+    from docformat.ingest import _numbering_formats
+
+    src = docx.Document()
+    decimal_nid = next(
+        nid for (nid, ilvl), fmt in _numbering_formats(src).items()
+        if ilvl == "0" and fmt == "decimal"
+    )
+    p = src.add_paragraph("First numbered step", style="List Paragraph")
+    p._p.get_or_add_pPr().append(parse_xml(
+        f'<w:numPr {W}><w:ilvl w:val="0"/><w:numId w:val="{decimal_nid}"/></w:numPr>'
+    ))
+    src_path = tmp_path / "src.docx"
+    src.save(src_path)
+
+    doc = classify(ingest(src_path))
+    item = next(b for b in doc.blocks if b.text == "First numbered step")
+    assert item.label is BlockType.LIST_NUMBER
+    assert item.hints.has_numbering and item.hints.list_ordered
 
 
 def test_hyperlink_url_carried(tmp_path, profile):

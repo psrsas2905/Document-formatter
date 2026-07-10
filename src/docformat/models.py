@@ -73,6 +73,10 @@ class FormatHints:
     is_list_marker: bool = False
     # True when the paragraph carries Word-native list numbering (w:numPr).
     has_numbering: bool = False
+    # True when that native numbering is an ordered format (decimal/letter/roman)
+    # rather than a bullet — resolved from numbering.xml. Only meaningful when
+    # has_numbering is True.
+    list_ordered: bool = False
     list_level: int = 0
 
 

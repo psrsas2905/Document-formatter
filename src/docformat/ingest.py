@@ -118,8 +118,9 @@ def ingest(source_path: str | Path) -> Document:
     stats = _Stats()
     stats.comments = _comment_texts(src)
 
+    numbering = _numbering_formats(src)
     blocks: list[Block] = []
-    _walk_body(src.element.body, src, blocks, notes_ctx, stats)
+    _walk_body(src.element.body, src, blocks, notes_ctx, stats, numbering)
 
     doc = Document(
         blocks=blocks,
@@ -130,7 +131,7 @@ def ingest(source_path: str | Path) -> Document:
     return doc
 
 
-def _walk_body(container, src, blocks: list[Block], notes_ctx, stats: _Stats) -> None:
+def _walk_body(container, src, blocks: list[Block], notes_ctx, stats: _Stats, numbering) -> None:
     """Collect blocks from a body-level container, descending into content
     controls (w:sdt) so their wrapped paragraphs/tables are not lost."""
     from docx.table import Table
@@ -146,14 +147,15 @@ def _walk_body(container, src, blocks: list[Block], notes_ctx, stats: _Stats) ->
             if not text and not any(s.kind != "text" for s in segments):
                 continue
             blocks.append(
-                Block(text=text, hints=_hints_for(para, text, leading_tabs), segments=segments)
+                Block(text=text, hints=_hints_for(para, text, leading_tabs, numbering),
+                      segments=segments)
             )
         elif el.tag == qn("w:tbl"):
             blocks.append(_table_block(Table(el, src), src))
         elif el.tag == qn("w:sdt"):
             content = el.find(qn("w:sdtContent"))
             if content is not None:
-                _walk_body(content, src, blocks, notes_ctx, stats)
+                _walk_body(content, src, blocks, notes_ctx, stats, numbering)
 
 
 # --- inline segments ---------------------------------------------------------
@@ -306,6 +308,39 @@ def _note_texts(src, reltype: str, element: str) -> dict[str, str]:
     return texts
 
 
+def _numbering_formats(src) -> dict[tuple[str, str], str]:
+    """Map (numId, ilvl) -> numFmt ('decimal', 'bullet', 'lowerLetter', ...) by
+    resolving numbering.xml: each w:num points at a w:abstractNum, whose w:lvl
+    entries carry the w:numFmt. Empty when the document defines no numbering."""
+    try:
+        part = src.part.numbering_part
+    except (KeyError, AttributeError, NotImplementedError, ValueError):
+        return {}
+    if part is None:
+        return {}
+    root = etree.fromstring(part.blob)
+
+    abstract_fmt: dict[tuple[str, str], str] = {}
+    for anum in root.findall(qn("w:abstractNum")):
+        aid = anum.get(qn("w:abstractNumId"))
+        for lvl in anum.findall(qn("w:lvl")):
+            fmt_el = lvl.find(qn("w:numFmt"))
+            if fmt_el is not None and fmt_el.get(qn("w:val")):
+                abstract_fmt[(aid, lvl.get(qn("w:ilvl")))] = fmt_el.get(qn("w:val"))
+
+    result: dict[tuple[str, str], str] = {}
+    for num in root.findall(qn("w:num")):
+        num_id = num.get(qn("w:numId"))
+        aid_el = num.find(qn("w:abstractNumId"))
+        if num_id is None or aid_el is None:
+            continue
+        aid = aid_el.get(qn("w:val"))
+        for (a, ilvl), fmt in abstract_fmt.items():
+            if a == aid:
+                result[(num_id, ilvl)] = fmt
+    return result
+
+
 def _comment_texts(src) -> list[tuple[str, str]]:
     """(author, excerpt) for every comment in the source."""
     try:
@@ -354,7 +389,7 @@ def _table_block(table, src) -> Block:
 # --- paragraph hints -----------------------------------------------------------
 
 
-def _hints_for(para, text: str, leading_tabs: int) -> FormatHints:
+def _hints_for(para, text: str, leading_tabs: int, numbering: dict) -> FormatHints:
     """Distill a paragraph's raw formatting signals into FormatHints."""
     runs = [r for r in para.runs if r.text.strip()]
 
@@ -378,17 +413,27 @@ def _hints_for(para, text: str, leading_tabs: int) -> FormatHints:
     num_pr = para._p.find(f"{qn('w:pPr')}/{qn('w:numPr')}")
     has_numbering = num_pr is not None
     ilvl = num_pr.find(qn("w:ilvl")) if has_numbering else None
+    num_id = num_pr.find(qn("w:numId")) if has_numbering else None
 
     is_list_marker = LIST_MARKER_RE.match(text) is not None
 
     indent = para.paragraph_format.left_indent
     indent_pt = (indent.pt if indent is not None else 0.0) + leading_tabs * INDENT_PT_PER_LEVEL
     list_level = int(indent_pt // INDENT_PT_PER_LEVEL) if indent_pt > 0 else 0
+    ilvl_val = "0"
     if has_numbering and ilvl is not None:
-        list_level = int(ilvl.get(qn("w:val"), "0"))
+        ilvl_val = ilvl.get(qn("w:val"), "0")
+        list_level = int(ilvl_val)
     # "a)" / roman sub-markers imply nesting even without physical indent.
     elif is_list_marker and list_level == 0 and SUB_MARKER_RE.match(text):
         list_level = 1
+
+    # Ordered vs bullet for native lists, resolved through numbering.xml. Bullet
+    # (or unresolvable) stays False so the classifier keeps its safe default.
+    list_ordered = False
+    if has_numbering and num_id is not None:
+        fmt = numbering.get((num_id.get(qn("w:val")), ilvl_val))
+        list_ordered = fmt is not None and fmt not in ("bullet", "none")
 
     return FormatHints(
         font_size_pt=font_size_pt,
@@ -398,6 +443,7 @@ def _hints_for(para, text: str, leading_tabs: int) -> FormatHints:
         existing_style=existing_style,
         is_list_marker=is_list_marker,
         has_numbering=has_numbering,
+        list_ordered=list_ordered,
         list_level=list_level,
     )
 

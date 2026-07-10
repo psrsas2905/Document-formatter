@@ -40,18 +40,27 @@ remains, in priority order.
 
 ## Tier 3 — versatility (post-pilot, by user feedback)
 
-- [ ] Dry-run/preview mode + per-document classification overrides file
-      (re-runs currently destroy manual fixes).
-- [ ] Batch processing with a consolidated QA summary.
-- [ ] `docformat inspect-template` (list styles + placeholders — also feeds
-      GUI field auto-suggestion) and `docformat validate-profile`.
+- [x] Dry-run/preview mode + per-document classification overrides file
+      (re-runs no longer destroy manual fixes) — `format --dry-run` /
+      `--overrides FILE`, `src/docformat/overrides.py`.
+- [x] Batch processing with a consolidated QA summary — `docformat batch`,
+      `src/docformat/batch.py`.
+- [x] `docformat inspect-template` (list styles + placeholders) and
+      `docformat validate-profile` — `src/docformat/inspect.py`.
+- [x] Character formatting beyond bold/italic: sub/superscript (H₂O/x² are
+      *meaning*), underline, strikethrough. (Highlight still deferred — it is a
+      colour the template governs, not clearly semantic.)
+- [x] Honor `output.filename` profile setting — `template.output_stem`.
+- [x] ListNumber block type so manual "1." lists map to `List Number`.
 - [ ] GUI: show active profile, progress during PDF export, block anchors in
       the review table, honest signal when --ai is checked but Ollama absent.
-- [ ] Character formatting beyond bold/italic: sub/superscript (H₂O/x² are
-      *meaning*, not styling), underline, strikethrough, highlight.
+      (inspect-template's placeholder extraction is ready to feed GUI field
+      auto-suggestion.)
 - [ ] Sections/page breaks/landscape carried or QA-flagged; text-box content
       carry (currently QA-flagged only); VML image conversion.
 - [ ] CJK/RTL: char-based shortness, "。" as period, 图/表/第X章 patterns.
 - [ ] QA report anchors (nearest heading per row) or injected Word comments.
-- [ ] Honor `output.filename` profile setting (currently dead config).
-- [ ] ListNumber block type so manual "1." lists can map to `List Number`.
+- [ ] Highlight (font.highlight_color) carry, if pilots want author annotations.
+- [ ] Word-native (w:numPr) lists: detect ordered vs bullet from numbering.xml
+      so ribbon-numbered lists also become ListNumber (currently only typed
+      "1."/"a)" markers do).

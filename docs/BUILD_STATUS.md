@@ -1,20 +1,21 @@
 # Build Status & Deployment Readiness
 
-> Snapshot: 2026-07-10, commit `c9212cd` on
-> `claude/docformat-offline-tool-3xb0yq`. Pair with `docs/HANDOFF.md`.
+> Snapshot: 2026-07-10, Tier 3 on `claude/tier-3-continuation-cy9ari`
+> (based on the completed `claude/docformat-offline-tool-3xb0yq`).
+> Pair with `docs/HANDOFF.md`.
 
 ## At a glance
 
 | Area | Status |
 |------|--------|
 | Spec v1 acceptance criteria | ✅ all met |
-| Test suite | ✅ 51 passing (`python -m pytest -q`) |
+| Test suite | ✅ 71 passing (`python -m pytest -q`) |
 | Lint | ✅ clean (`ruff check src tests scripts`) |
 | CI (GitHub Actions) | ✅ green — lint+test + 3-OS build matrix |
 | Cross-platform executables | ✅ build on Win/macOS/Linux in CI |
 | Content fidelity (Tier 1) | ✅ done — no silent loss |
 | Deployment hardening (Tier 2) | ✅ done except code-signing |
-| Versatility (Tier 3) | ⏳ backlog — post-pilot |
+| Versatility (Tier 3) | ✅ high-value items done (dry-run/overrides, batch, inspect/validate, char formatting, ordered lists); GUI polish + CJK/RTL remain |
 | **Ship to a writing team** | ⚠️ **pilot-ready; general rollout gated on signing** |
 
 ## What "done" means concretely
@@ -71,9 +72,11 @@ locations; override with `DOCFORMAT_SOFFICE=/path/to/soffice`.
 - Footnotes carry as plain text (formatting inside notes dropped; QA-noted).
 - Tracked changes are auto-accepted (QA-noted) — accept/reject in Word first
   if that matters.
-- Character formatting beyond bold/italic (sub/superscript, underline,
-  strikethrough, highlight) is not yet preserved — Tier 3.
-- Classifier heuristics are English-oriented (CJK/RTL is Tier 3), though the
-  template/geometry side of the GB/T preset works.
+- Character formatting: sub/superscript, underline and strikethrough are now
+  preserved; highlight is still dropped (the template governs colour).
+- Classifier heuristics are English-oriented (CJK/RTL is still Tier 3), though
+  the template/geometry side of the GB/T preset works.
+- Ordered lists: typed "1."/"a)" lists map to the numbered style; Word-native
+  (ribbon) numbered lists still map to the bullet style (Tier 3).
 - Every uncertain or dropped item is listed in `qa_report.md` — that report is
   the contract; tell writers to read it before signing off.

@@ -6,16 +6,17 @@
 
 ## TL;DR for the next session
 
-- **Branch:** `claude/docformat-offline-tool-3xb0yq` (all work here, pushed).
-  No PR opened yet — the user hasn't asked for one.
-- **Tests:** 51 passing (`python -m pytest -q`). Lint clean
+- **Branch:** Tier 3 work continues on `claude/tier-3-continuation-cy9ari`
+  (based on the completed `claude/docformat-offline-tool-3xb0yq`). No PR opened
+  yet — the user hasn't asked for one.
+- **Tests:** 71 passing (`python -m pytest -q`). Lint clean
   (`ruff check src tests scripts`).
 - **CI:** green — `.github/workflows/ci.yml` runs lint+pytest on Ubuntu (with
   LibreOffice) then builds PyInstaller executables on Windows/macOS/Linux.
-  Last run: all 4 jobs succeeded.
-- **Status:** Spec v1 complete. Two expert-review tiers done: **Tier 1**
-  (silent content loss) and **Tier 2** (deployment hardening). **Tier 3**
-  (versatility) is the remaining roadmap — see `docs/REVIEW_BACKLOG.md`.
+- **Status:** Spec v1 complete. **Tier 1** (silent content loss), **Tier 2**
+  (deployment hardening) and most of **Tier 3** (versatility) are done — see
+  `docs/REVIEW_BACKLOG.md` for the remaining Tier 3 items (GUI polish,
+  sections/page-breaks, CJK/RTL, QA anchors).
 - **Only true blocker left for a desktop rollout:** code-signing /
   notarization needs certificates only the owner can procure. Everything
   else technical is done.
@@ -49,10 +50,13 @@ bash scripts/build_exe.sh   # -> dist/docformat (rebuild after changes; runs doc
 | `footnotes.py`  | OPC-level footnotes part writer (python-docx has no footnote API). |
 | `convert.py`    | .doc/.odt/.rtf → docx (soffice), .txt direct (utf-8/cp1252), .md (pandoc). |
 | `soffice.py`    | **Cross-platform LibreOffice discovery**, isolated profiles, timeouts, stderr surfacing. |
-| `qa.py`         | `qa_report.md`: low-confidence blocks, heading jumps, alt text, `Document.notes`. |
+| `qa.py`         | `qa_report.md`: low-confidence blocks, heading jumps, alt text, `Document.notes`. `review_counts`/`needs_review` shared with batch. |
+| `overrides.py`  | Human classification plan: `write_plan` (`--dry-run`), `apply_overrides` (`--overrides`). Pins are text-snippet-guarded against draft drift. |
+| `batch.py`      | `docformat batch`: expand files/dirs, format each into its own subfolder, write consolidated `batch_summary.md`; one bad doc is captured, not fatal. |
+| `inspect.py`    | `inspect_template` (styles + `[placeholders]`) and `validate_profile` (mapped styles exist in the template). Read-only. |
 | `log.py`        | Rotating file log in per-OS user dir. |
 | `errors.py`     | Maps expected exceptions → friendly one-line messages (shared CLI/GUI). |
-| `cli.py`        | `docformat format` / `gui` / `--version`; friendly error wrapping. |
+| `cli.py`        | `docformat format` (+ `--dry-run`/`--overrides`) / `batch` / `inspect-template` / `validate-profile` / `gui` / `--version`; friendly error wrapping. |
 | `gui.py`        | Hardened stdlib HTTP server on 127.0.0.1 + `assets/gui.html`. |
 
 ## What was built, in order (one commit per stage, newest last)
@@ -66,6 +70,8 @@ bash scripts/build_exe.sh   # -> dist/docformat (rebuild after changes; runs doc
    degradation, cover placeholders, per-document `--set` fields).
 7. **Tier 1 review fixes** — eliminate silent content loss (see below).
 8. **Tier 2** — deployment hardening across 4 commits (see below).
+9. **Tier 3** — versatility (see below): character formatting, inspect/validate,
+   dry-run/overrides, batch, output.filename, ListNumber.
 
 ## Tier 1 — silent content loss (DONE, `tests/test_fidelity.py`)
 
@@ -100,6 +106,26 @@ Now every category is either carried or QA-reported:
   source; UPX off (AV); `collect_all('docx')`. CI matrix win/mac/linux.
   `CHANGELOG.md`; version single-sourced from `docformat.__version__`.
 
+## Tier 3 — versatility (DONE this session, `claude/tier-3-continuation-cy9ari`)
+
+- **Character formatting** (`tests/test_rich.py`): sub/superscript carry on every
+  block (meaning, e.g. x²/H₂O); underline/strike are inline emphasis (kept in
+  Body/List/Quote, dropped when uniform, like bold/italic). Read in
+  `ingest._run_segments`, emitted in `apply._emit_paragraph`.
+- **inspect-template / validate-profile** (`inspect.py`, `tests/test_inspect.py`):
+  onboarding helpers. `Normal` is always a valid mapped style (Word's default
+  applies even when a template omits it — RedLotus does).
+- **Dry-run + overrides** (`overrides.py`, `tests/test_overrides.py`): the plan
+  pre-fills sub-threshold blocks and lists a full document map as comments; a
+  pin sets confidence 1.0 (drops out of QA); prefix text-guard tolerates the
+  plan's truncated previews but catches genuine drift.
+- **batch** (`batch.py`, `tests/test_batch.py`): per-doc subfolders +
+  `batch_summary.md`, worst-review-first; survives one bad document; optional
+  `--overrides-dir`.
+- **output.filename** honored (`template.output_stem`); **ListNumber** block type
+  for ordered typed markers (bullets stay LIST_ITEM; ListNumber is an optional
+  profile mapping, falls back to the ListItem style).
+
 ## Key design decisions (don't re-litigate without cause)
 
 - **Template is the source of truth.** Never invent formatting; missing mapped
@@ -125,18 +151,21 @@ Now every category is either carried or QA-reported:
 - `config/template_profile.{example,apa,gbt7713,redlotus}.yaml`.
 - `tests/golden/input_messy_styles.tsv` — golden style/text sequence.
 
-## Where to start next session — Tier 3 (post-pilot versatility)
+## Where to start next session — remaining Tier 3
 
-See `docs/REVIEW_BACKLOG.md` for the full list. Highest-value:
-1. **Dry-run/preview + per-document overrides file** — re-runs currently
-   destroy manual fixes; writers need a way to pin classifications.
-2. **Batch processing** with a consolidated QA summary (migrate N docs).
-3. **`docformat inspect-template` / `validate-profile`** — list a template's
-   styles + placeholders; also feeds GUI field auto-suggestion.
-4. **Character formatting** beyond bold/italic — sub/superscript (H₂O/x² is
-   *meaning*), underline, strikethrough, highlight.
-5. GUI: show active profile, export progress, honest "Ollama not running".
-6. CJK/RTL heuristics (GB/T profile ships but classifier is English-only).
+The high-value Tier 3 items are done (above). What's left, see
+`docs/REVIEW_BACKLOG.md`:
+1. **GUI polish** — surface the active profile, PDF-export progress, block
+   anchors in the review table, and an honest signal when `--ai` is checked but
+   Ollama isn't running. `inspect.py`'s placeholder extraction is ready to feed
+   GUI field auto-suggestion.
+2. **Sections / page breaks / landscape** carried or QA-flagged; text-box
+   content carry (currently QA-flagged only); VML image conversion.
+3. **CJK/RTL heuristics** (GB/T profile ships but the classifier is English-only:
+   char-based shortness, "。" as period, 图/表/第X章 patterns).
+4. **QA report anchors** (nearest heading per row) or injected Word comments.
+5. **Word-native (w:numPr) ordered lists** → ListNumber by reading numbering.xml
+   (currently only typed "1."/"a)" markers route to ListNumber).
 
 ## Environment notes (fresh container)
 

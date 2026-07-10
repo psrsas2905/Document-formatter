@@ -73,6 +73,47 @@ re-judge the blocks the heuristics were unsure about. If Ollama isn't running,
 the flag is a no-op — the deterministic result stands. `--no-pdf` skips the
 LibreOffice export.
 
+### Preview, and make manual fixes stick
+
+Re-running a draft shouldn't throw away corrections you made by hand. Preview
+the classification first, edit what's wrong, then format for real:
+
+```bash
+# 1. Dry run — writes an editable plan (no document produced)
+docformat format draft.docx -t profile.yaml --out out/ --dry-run
+#    edit out/draft_overrides.yaml: fix any `label:` the classifier got wrong
+
+# 2. Format, honoring your pinned classifications
+docformat format draft.docx -t profile.yaml --out out/ --overrides out/draft_overrides.yaml
+```
+
+A pinned block is trusted and drops out of the QA report; if the draft later
+changes where a pin points, that pin is skipped and flagged instead of landing
+on the wrong paragraph.
+
+### Batch a whole folder
+
+```bash
+docformat batch drafts/ -t profile.yaml --out out/
+```
+
+Formats every supported draft into its own subfolder and writes
+`out/batch_summary.md` — documents ranked by how much review they still need, so
+you know where to start. One unreadable file is reported, not fatal. Add
+`--overrides-dir plans/` to re-apply per-document classification plans.
+
+### Onboard a new template
+
+```bash
+docformat inspect-template your_template.docx   # list its styles + [placeholders]
+docformat validate-profile profile.yaml         # check the profile matches it
+```
+
+`inspect-template` prints the exact style names to put in a profile's
+`style_map` and the placeholder tokens to fill with `--set`/`replace:`.
+`validate-profile` fails loudly if the profile maps to a style the template
+doesn't define.
+
 ### GUI (for non-technical writers)
 
 ```bash
@@ -112,6 +153,10 @@ carries through, content-intact:
 - **Footnotes** — re-attached (plain text; flagged in the QA report)
 - **Inline emphasis** — bold/italic *inside* body text survives; uniform
   whole-paragraph bold (pseudo-heading decoration) is replaced by the style
+- **Character formatting** — sub/superscript (x², H₂O) always survive; underline
+  and strikethrough are kept as inline emphasis
+- **Ordered vs bullet lists** — "1."/"a)" lists keep their numbering (mapped to
+  the template's numbered-list style), bullets stay bullets
 - MathType/OLE objects can't be carried — the QA report lists each one
 
 Input formats: `.docx`, `.doc`, `.odt`, `.rtf`, `.txt` (and `.md` with pandoc
@@ -131,6 +176,10 @@ with your institution's template file for typography.
 - [x] Local web GUI for non-technical writers
 - [x] Content preservation: equations, images, tables, footnotes, emphasis
 - [x] Brand templates with cover pages + per-document field values
+- [x] Dry-run preview + classification overrides (fixes survive re-runs)
+- [x] Batch processing with a consolidated QA summary
+- [x] `inspect-template` / `validate-profile` for template onboarding
+- [x] Character formatting (sub/superscript, underline, strike) + ordered lists
 
 ## Contributing
 

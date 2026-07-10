@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased — Tier 3 (versatility)
+
+Post-pilot versatility features, built on the v1 pipeline:
+
+- **Manual fixes survive re-runs**: `format --dry-run` writes an editable
+  classification plan; `format --overrides FILE` re-applies those human
+  decisions (pinned blocks are trusted and drop out of QA). Pins are guarded by
+  a text snippet, so a drifted draft skips the pin and QA-notes it instead of
+  mis-labelling.
+- **Batch processing**: `docformat batch FILES/DIRS` formats many drafts, each
+  into its own subfolder, and writes a consolidated `batch_summary.md`
+  (worst-review-first). One bad document is reported, not fatal.
+  `--overrides-dir` re-applies per-document plans.
+- **Template onboarding**: `docformat inspect-template` lists a template's named
+  styles and `[placeholder]` tokens; `docformat validate-profile` checks every
+  style a profile maps to actually exists in its template.
+- **Semantic character formatting**: sub/superscript (x², H₂O), underline and
+  strikethrough are preserved (previously only bold/italic).
+- **Ordered lists**: a new `ListNumber` block type keeps manual "1." / "a)"
+  lists numbered instead of rendering them as bullets.
+- **`output.filename`** profile setting is now honored ({basename}/{version}/
+  {date} tokens); was previously dead config.
+
 ## 0.1.0 — 2026-07-10 (unreleased)
 
 Initial version. Highlights, in build order:

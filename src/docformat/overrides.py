@@ -34,6 +34,7 @@ ASSIGNABLE = [
     BlockType.BODY,
     BlockType.CAPTION,
     BlockType.LIST_ITEM,
+    BlockType.LIST_NUMBER,
     BlockType.QUOTE,
 ]
 _ASSIGNABLE_VALUES = {b.value for b in ASSIGNABLE}

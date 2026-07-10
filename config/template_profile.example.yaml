@@ -18,6 +18,7 @@ style_map:
   Body:     "Body Text"
   Caption:  "Caption"
   ListItem: "List Bullet"
+  ListNumber: "List Number"
   Quote:    "Quote"
 
 page:

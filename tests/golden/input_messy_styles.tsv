@@ -11,11 +11,11 @@ List Bullet	Wear insulated gloves rated to 1000 V
 List Bullet	Keep the work area dry at all times
 List Bullet	Never bypass the interlock switch
 Heading 2	Installation Steps
-List Bullet	Unpack the widget and check the contents against the packing list.
-List Bullet	Mount the base plate using the four M6 bolts supplied.
-List Bullet 2	Torque each bolt to the value shown below.
-List Bullet 2	Re-check torque after the first 24 hours of operation.
-List Bullet	Connect the signal cable to port A.
+List Number	Unpack the widget and check the contents against the packing list.
+List Number	Mount the base plate using the four M6 bolts supplied.
+List Number 2	Torque each bolt to the value shown below.
+List Number 2	Re-check torque after the first 24 hours of operation.
+List Number	Connect the signal cable to port A.
 Caption	Figure : Wiring diagram for single-phase supply
 Body Text	The diagram above shows the recommended earthing arrangement. Local regulations take precedence where they differ.
 Caption	Table  - Torque settings by bolt size

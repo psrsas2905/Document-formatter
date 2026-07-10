@@ -32,7 +32,8 @@ from .ingest import A_BLIP, LIST_MARKER_RE, R_EMBED
 from .models import BlockType, Document, Segment
 from .template import TemplateProfile
 
-_EMPHASIS_LABELS = {BlockType.BODY, BlockType.LIST_ITEM, BlockType.QUOTE}
+_LIST_LABELS = {BlockType.LIST_ITEM, BlockType.LIST_NUMBER}
+_EMPHASIS_LABELS = {BlockType.BODY, BlockType.QUOTE} | _LIST_LABELS
 
 
 def apply_styles(doc: Document, profile: TemplateProfile, out_path: str | Path) -> Path:
@@ -119,7 +120,7 @@ def _emit_paragraph(out, block, style, footnotes: FootnoteWriter) -> int:
             text = seg.text
             if lead_pending:
                 text = text.lstrip("\t ")
-                if block.label is BlockType.LIST_ITEM:
+                if block.label in _LIST_LABELS:
                     text = LIST_MARKER_RE.sub("", text)
                 if text:
                     lead_pending = False
@@ -355,10 +356,14 @@ def _style_for_block(block, profile: TemplateProfile, available: set[str]) -> st
         # Unclassifiable content is still emitted (as body) — qa.py reports it.
         label = BlockType.BODY
     style_name = profile.style_for(label.value)
+    if style_name is None and label is BlockType.LIST_NUMBER:
+        # ListNumber is an optional mapping: profiles that don't distinguish
+        # ordered lists fall back to the ordinary list style.
+        style_name = profile.style_for(BlockType.LIST_ITEM.value)
     if style_name is None:
         raise ValueError(f"Profile {profile.name!r} has no style mapping for {label.value!r}")
 
-    if label is BlockType.LIST_ITEM and block.hints.list_level > 0:
+    if label in _LIST_LABELS and block.hints.list_level > 0:
         leveled = f"{style_name} {block.hints.list_level + 1}"
         if leveled in available:
             return leveled

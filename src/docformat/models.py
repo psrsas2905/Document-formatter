@@ -18,7 +18,8 @@ class BlockType(str, Enum):
     HEADING3 = "Heading3"
     BODY = "Body"
     CAPTION = "Caption"
-    LIST_ITEM = "ListItem"
+    LIST_ITEM = "ListItem"  # unordered (bullet) list item
+    LIST_NUMBER = "ListNumber"  # ordered (1./a)/i)) list item
     QUOTE = "Quote"
     TABLE = "Table"  # carried through content-intact, restyled by the template
     UNKNOWN = "Unknown"  # could not classify confidently -> goes to QA report

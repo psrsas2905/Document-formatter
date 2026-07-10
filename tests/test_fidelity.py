@@ -229,9 +229,10 @@ def test_numbered_heading_vs_list_discrimination():
         classify(doc)
         return next(b for b in doc.blocks if b.text == target)
 
-    # A run of "N." items stays a list at high confidence.
+    # A run of "N." items stays an (ordered) list at high confidence.
     seq = ["1. Wear gloves", "2. Keep the area dry", "3. Check torque"]
-    assert label_of(seq, "2. Keep the area dry").label is BlockType.LIST_ITEM
+    item = label_of(seq, "2. Keep the area dry")
+    assert item.label is BlockType.LIST_NUMBER and item.confidence >= 0.85
 
     # A lone bold "1. Introduction" is a heading.
     b = label_of(["1. Introduction"], "1. Introduction", bold_targets=["1. Introduction"])
@@ -245,6 +246,6 @@ def test_numbered_heading_vs_list_discrimination():
     b = label_of(["5 people attended the meeting"], "5 people attended the meeting")
     assert b.label is BlockType.BODY
 
-    # "A. Smith et al. (2020) argue" is prose, not a list item.
+    # "A. Smith et al. (2020) argue" is prose, not a list item (ordered or not).
     b = label_of(["A. Smith et al. (2020) argue"], "A. Smith et al. (2020) argue")
-    assert b.label is not BlockType.LIST_ITEM
+    assert b.label not in (BlockType.LIST_ITEM, BlockType.LIST_NUMBER)

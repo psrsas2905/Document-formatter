@@ -15,6 +15,7 @@ style_map:
   Body:     "Body Text"
   Caption:  "Caption"
   ListItem: "List Bullet"
+  ListNumber: "List Number"
   Quote:    "Quote"
 
 table_style: "Table Grid"    # swap for a three-line (booktabs) style if the

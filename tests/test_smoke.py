@@ -57,7 +57,7 @@ def test_classify_sample():
     assert by_text["Figure 1: Wiring diagram for single-phase supply"].label is BlockType.CAPTION
     assert by_text["Table 2 - Torque settings by bolt size"].label is BlockType.CAPTION
     assert by_text["• Wear insulated gloves rated to 1000 V"].label is BlockType.LIST_ITEM
-    assert by_text["3. Connect the signal cable to port A."].label is BlockType.LIST_ITEM
+    assert by_text["3. Connect the signal cable to port A."].label is BlockType.LIST_NUMBER
 
     trusted = by_text["Maintenance Schedule"]
     assert trusted.label is BlockType.HEADING2 and trusted.confidence == 1.0
@@ -67,6 +67,20 @@ def test_classify_sample():
     assert ambiguous.confidence < CONFIDENCE_THRESHOLD  # must reach the QA report
 
     assert all(b.label is not BlockType.UNKNOWN for b in doc.blocks)
+
+
+def test_ordered_vs_bullet_lists():
+    from docformat.classify import classify
+    from docformat.ingest import ingest
+    from docformat.models import BlockType
+
+    doc = classify(ingest("samples/input_messy.docx"))
+    by_text = {b.text: b for b in doc.blocks}
+    # Bullet glyphs -> unordered; numbers/letters -> ordered.
+    assert by_text["• Wear insulated gloves rated to 1000 V"].label is BlockType.LIST_ITEM
+    assert by_text["1. Unpack the widget and check the contents against the packing list."].label \
+        is BlockType.LIST_NUMBER
+    assert by_text["a) Torque each bolt to the value shown below."].label is BlockType.LIST_NUMBER
 
 
 def test_apply_styles(tmp_path):
@@ -85,7 +99,8 @@ def test_apply_styles(tmp_path):
     styles = [p.style.name for p in result.paragraphs]
     assert styles[0] == "Heading 1"
     assert "List Bullet" in styles and "Caption" in styles and "Quote" in styles
-    assert "List Bullet 2" in styles  # nested a)/b) items pick the level variant
+    assert "List Number" in styles  # ordered "1." items map to the numbered style
+    assert "List Number 2" in styles  # nested a)/b) items pick the level variant
 
     for para in result.paragraphs:
         assert "\t" not in para.text
@@ -252,10 +267,10 @@ def test_preset_profiles_load():
     assert apa.raw["page"]["size"] == "Letter" and not apa.raw["toc"]["enabled"]
     gbt = load_profile("config/template_profile.gbt7713.yaml")
     assert gbt.raw["page"]["margins_mm"]["left"] == 31.7 and gbt.raw["toc"]["enabled"]
+    required = {"Heading1", "Heading2", "Heading3", "Body", "Caption", "ListItem", "Quote"}
     for profile in (apa, gbt):
-        assert set(profile.style_map) == {
-            "Heading1", "Heading2", "Heading3", "Body", "Caption", "ListItem", "Quote",
-        }
+        assert required <= set(profile.style_map)  # ListNumber is an optional extra
+        assert profile.style_map["ListNumber"] == "List Number"
 
 
 def test_soffice_discovery(monkeypatch, tmp_path):

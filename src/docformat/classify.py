@@ -34,6 +34,9 @@ CAPTION_RE = re.compile(r"^(figure|table)\s+\d+", re.IGNORECASE)
 NUMBERED_RE = re.compile(r"^(\d{1,2}(?:\.\d{1,2}){0,3})([.)]?)\s+\S")
 # Single-level "1." / "1)" item — used for run-of-items sequence detection.
 SINGLE_NUM_ITEM_RE = re.compile(r"^\d{1,3}[.)]\s+")
+# An ordered marker (number / letter / roman), as opposed to a bullet glyph —
+# tells LIST_NUMBER (1./a)/i)) apart from LIST_ITEM (•/-/*).
+ORDERED_MARKER_RE = re.compile(r"^(?:\d{1,3}[.)]|[a-z][.)]|[ivxl]{1,5}[.)])\s")
 
 # Built-in style names we recognize as already-valid labels (spec: trust them).
 STYLE_TO_LABEL: dict[str, BlockType] = {
@@ -44,12 +47,17 @@ STYLE_TO_LABEL: dict[str, BlockType] = {
     "Body Text": BlockType.BODY,
     "Caption": BlockType.CAPTION,
     "List Bullet": BlockType.LIST_ITEM,
-    "List Number": BlockType.LIST_ITEM,
+    "List Number": BlockType.LIST_NUMBER,
     "Quote": BlockType.QUOTE,
     "Intense Quote": BlockType.QUOTE,
 }
 
 _HEADING_LEVELS = [BlockType.HEADING1, BlockType.HEADING2, BlockType.HEADING3]
+
+
+def _list_label(text: str) -> BlockType:
+    """Ordered marker (1./a)/i)) -> LIST_NUMBER; bullet glyph -> LIST_ITEM."""
+    return BlockType.LIST_NUMBER if ORDERED_MARKER_RE.match(text) else BlockType.LIST_ITEM
 
 
 def classify(doc: Document) -> Document:
@@ -127,20 +135,20 @@ def _classify_block(
             level = min(len(parts), len(_HEADING_LEVELS))
             return _HEADING_LEVELS[level - 1], 0.9 if h.bold else 0.85
         if not multi_level and punctuated:
-            # "1. xxx": sentence-like or part of a numbered run -> list item;
-            # a lone short one is genuinely ambiguous -> low confidence (QA).
+            # "1. xxx": sentence-like or part of a numbered run -> ordered list
+            # item; a lone short one is genuinely ambiguous -> low conf (QA).
             if not is_short or in_sequence:
-                return BlockType.LIST_ITEM, 0.9
+                return BlockType.LIST_NUMBER, 0.9
             if h.bold:
                 return BlockType.HEADING1, 0.85
-            return BlockType.LIST_ITEM, 0.55
+            return BlockType.LIST_NUMBER, 0.55
         if not multi_level and not punctuated and is_short and h.bold:
             return BlockType.HEADING1, 0.9
         # bare "5 people attended..." carries no heading signal: fall through.
 
-    # 5. Typed bullet/letter/roman marker -> list item (level already in hints).
+    # 5. Typed marker -> list item; ordered (1./a)/i)) vs bullet (level in hints).
     if h.is_list_marker:
-        return BlockType.LIST_ITEM, 0.9
+        return _list_label(text), 0.9
 
     # 6. Larger than body -> heading; level from the document-wide size ranking.
     if size in size_rank:

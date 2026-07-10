@@ -1,21 +1,21 @@
 # Build Status & Deployment Readiness
 
-> Snapshot: 2026-07-10, Tier 3 on `claude/tier-3-continuation-cy9ari`
-> (based on the completed `claude/docformat-offline-tool-3xb0yq`).
-> Pair with `docs/HANDOFF.md`.
+> Snapshot: 2026-07-10 — **Tiers 1–4 merged to `main`** (PR #1 = Tiers 1–3,
+> PR #2 = Tier 4), commit `0ad2a3c`. Pair with `docs/HANDOFF.md`.
 
 ## At a glance
 
 | Area | Status |
 |------|--------|
 | Spec v1 acceptance criteria | ✅ all met |
-| Test suite | ✅ 71 passing (`python -m pytest -q`) |
+| Test suite | ✅ 78 passing (`python -m pytest -q`) |
 | Lint | ✅ clean (`ruff check src tests scripts`) |
-| CI (GitHub Actions) | ✅ green — lint+test + 3-OS build matrix |
-| Cross-platform executables | ✅ build on Win/macOS/Linux in CI |
+| CI (GitHub Actions) | ✅ green on `main` — lint+test + 3-OS build matrix |
+| Cross-platform executables | ✅ build + smoke-test on Win/macOS/Linux in CI |
 | Content fidelity (Tier 1) | ✅ done — no silent loss |
 | Deployment hardening (Tier 2) | ✅ done except code-signing |
-| Versatility (Tier 3) | ✅ high-value items done (dry-run/overrides, batch, inspect/validate, char formatting, ordered lists); GUI polish + CJK/RTL remain |
+| Versatility (Tier 3) | ✅ done — dry-run/overrides, batch, inspect/validate, char formatting, output.filename, ListNumber |
+| Real-world readiness (Tier 4) | ✅ done — GUI polish, honest AI fallback, QA anchors, native ordered lists, page-breaks/section-flag, highlight + text-box carry |
 | **Ship to a writing team** | ⚠️ **pilot-ready; general rollout gated on signing** |
 
 ## What "done" means concretely
@@ -25,11 +25,15 @@
   including tagged-PDF export with refreshed TOC.
 - Rebuilt `dist/docformat` runs the full pipeline (incl. PDF) from a clean
   directory outside the repo.
-- CI run #1 (commit `c9212cd`): `test` (ubuntu) ✅, `build` on
-  ubuntu ✅ / windows ✅ / macos ✅ — executables uploaded as artifacts.
+- Latest CI on `main` (commit `0ad2a3c`, Tier 4 merge): `test` (ubuntu) ✅,
+  `build` on ubuntu ✅ / windows ✅ / macos ✅ — each with a passing executable
+  smoke check; artifacts uploaded.
 - Content preservation proven by `tests/test_fidelity.py` (probe docs with
-  tracked changes, fields, content controls, native lists, hyperlinks,
-  comments, endnotes, table hyperlinks).
+  tracked changes, fields, content controls, native lists (bullet + ordered),
+  hyperlinks, comments, endnotes, table hyperlinks, manual page breaks, section
+  breaks/landscape, and text boxes).
+- GUI verified in a real browser (active profile, honest AI/PDF signals,
+  block-index + heading-anchor review table).
 
 ### The one remaining blocker for unrestricted desktop rollout
 **Code-signing / notarization.** `docformat.spec` sets
@@ -64,8 +68,9 @@ locations; override with `DOCFORMAT_SOFFICE=/path/to/soffice`.
    unsigned binary). Collect real drafts + templates.
 2. **Procure signing certs** (lead time can exceed a week) → sign/notarize
    the CI artifacts → distribute to the full team.
-3. **Tier 3** by pilot feedback (dry-run/preview, batch, template inspection —
-   see `docs/REVIEW_BACKLOG.md`).
+3. **Iterate by pilot feedback** — Tiers 1–4 are done; the remaining backlog
+   (CJK/RTL, injected comments, VML) is optional/situational. See
+   `docs/REVIEW_BACKLOG.md`.
 
 ## Known limitations to communicate to users
 
@@ -75,9 +80,11 @@ locations; override with `DOCFORMAT_SOFFICE=/path/to/soffice`.
 - Character formatting: sub/superscript, underline, strikethrough and highlighter
   marks are preserved. Manual page breaks are carried; section breaks and
   landscape pages are QA-flagged (the template owns page setup).
-- Classifier heuristics are English-oriented (CJK/RTL is still Tier 3), though
-  the template/geometry side of the GB/T preset works.
-- Ordered lists: typed "1."/"a)" lists map to the numbered style; Word-native
-  (ribbon) numbered lists still map to the bullet style (Tier 3).
+- Text-box content is inlined into the flow in reading order (floating position
+  not preserved; QA-noted).
+- Classifier heuristics are English-oriented (CJK/RTL not yet done), though the
+  template/geometry side of the GB/T preset works.
+- Ordered lists: both typed "1."/"a)" and Word-native (ribbon) numbered lists
+  map to the numbered style; bullets stay bullets.
 - Every uncertain or dropped item is listed in `qa_report.md` — that report is
   the contract; tell writers to read it before signing off.

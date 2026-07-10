@@ -56,11 +56,13 @@ remains, in priority order.
       the review table, honest signal when --ai is checked but Ollama absent
       (`/meta` endpoint, `gui.html`). (inspect-template's placeholder extraction
       is still available to feed GUI field auto-suggestion — not wired yet.)
+- [x] QA report anchors (nearest heading per row) — `qa.heading_anchors`, shown
+      in the report's "Under heading" column and the GUI review table.
+- [x] Word-native (w:numPr) lists: detect ordered vs bullet from numbering.xml
+      so ribbon-numbered lists also become ListNumber — `ingest._numbering_formats`
+      + `FormatHints.list_ordered`.
 - [ ] Sections/page breaks/landscape carried or QA-flagged; text-box content
       carry (currently QA-flagged only); VML image conversion.
 - [ ] CJK/RTL: char-based shortness, "。" as period, 图/表/第X章 patterns.
-- [ ] QA report anchors (nearest heading per row) or injected Word comments.
+- [ ] Injected Word comments on flagged blocks (anchors done; comments still open).
 - [ ] Highlight (font.highlight_color) carry, if pilots want author annotations.
-- [ ] Word-native (w:numPr) lists: detect ordered vs bullet from numbering.xml
-      so ribbon-numbered lists also become ListNumber (currently only typed
-      "1."/"a)" markers do).

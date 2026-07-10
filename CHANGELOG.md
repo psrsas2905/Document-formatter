@@ -10,6 +10,11 @@
 - **Honest AI fallback**: requesting AI assist when no local Ollama model is
   reachable now records a QA note (CLI and GUI) instead of silently presenting
   rule-based labels as AI-reviewed.
+- **QA anchors**: the QA report and the GUI review table now show the nearest
+  heading above each flagged block, so a reviewer can locate it by section.
+- **Word-native ordered lists**: ribbon-numbered lists (`w:numPr` with a
+  decimal/letter/roman format) now map to `ListNumber`, not bullets — resolved
+  from `numbering.xml`.
 
 ## Unreleased — Tier 3 (versatility)
 

@@ -102,6 +102,8 @@ def _emit_paragraph(out, block, style, footnotes: FootnoteWriter) -> int:
     para = out.add_paragraph()
     if style is not None:
         para.style = style
+    if block.page_break_before:
+        para.paragraph_format.page_break_before = True
 
     segments = block.segments or [Segment(kind="text", text=block.text)]
     texts = [s for s in segments if s.kind == "text" and s.text.strip()]
@@ -258,6 +260,17 @@ def _emit_table(out, block, profile: TemplateProfile, doc: Document) -> None:
 
     body = out.element.body
     sect = body.find(qn("w:sectPr"))
+    # A table can't carry pageBreakBefore itself; force it onto a new page with a
+    # leading empty paragraph that does.
+    if block.page_break_before:
+        brk = parse_xml(
+            '<w:p xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+            "<w:pPr><w:pageBreakBefore/></w:pPr></w:p>"
+        )
+        if sect is not None:
+            sect.addprevious(brk)
+        else:
+            body.append(brk)
     if sect is not None:
         sect.addprevious(tbl)
     else:

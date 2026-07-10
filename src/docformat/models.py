@@ -88,6 +88,9 @@ class Block:
     hints: FormatHints = field(default_factory=FormatHints)
     label: BlockType = BlockType.UNKNOWN
     confidence: float = 0.0  # 0..1; low values are flagged for human review
+    # A manual page break (Ctrl+Enter / w:pageBreakBefore) preceded this block in
+    # the source — re-emitted so intentional pagination survives.
+    page_break_before: bool = False
     # Inline content in source order; empty means plain text-only paragraph.
     segments: list[Segment] = field(default_factory=list)
     # For TABLE blocks: the original w:tbl XML, plus image blobs and external

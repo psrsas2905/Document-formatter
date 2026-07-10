@@ -152,6 +152,51 @@ def test_native_ordered_list_maps_to_listnumber(tmp_path, profile):
     assert item.hints.has_numbering and item.hints.list_ordered
 
 
+def test_manual_page_break_carried(tmp_path, profile):
+    """A Ctrl+Enter break and a pageBreakBefore paragraph both survive to output."""
+    from docx.enum.text import WD_BREAK
+
+    src = docx.Document()
+    src.add_paragraph("Page one.")
+    src.add_paragraph("End of page one.").add_run().add_break(WD_BREAK.PAGE)
+    src.add_paragraph("Top of page two.")
+    forced = src.add_paragraph("Forced onto a new page.")
+    forced.paragraph_format.page_break_before = True
+    src_path = tmp_path / "src.docx"
+    src.save(src_path)
+
+    doc = classify(ingest(src_path))
+    by_text = {b.text: b for b in doc.blocks}
+    assert by_text["Top of page two."].page_break_before
+    assert by_text["Forced onto a new page."].page_break_before
+    assert not by_text["Page one."].page_break_before
+
+    out = apply_styles(doc, profile, tmp_path / "out.docx")
+    result = docx.Document(str(out))
+    broken = {p.text for p in result.paragraphs if p.paragraph_format.page_break_before}
+    assert {"Top of page two.", "Forced onto a new page."} <= broken
+
+
+def test_section_break_and_landscape_flagged(tmp_path, profile):
+    """Section breaks aren't carried (template owns page setup) but are QA-noted,
+    calling out landscape pages specifically."""
+    src = docx.Document()
+    src.add_paragraph("Portrait body.")
+    sect_p = parse_xml(
+        f"<w:p {W}><w:pPr><w:sectPr>"
+        '<w:pgSz w:w="16838" w:h="11906" w:orient="landscape"/>'
+        "</w:sectPr></w:pPr></w:p>"
+    )
+    src.element.body.insert(len(src.element.body) - 1, sect_p)
+    src.add_paragraph("Landscape body.")
+    src_path = tmp_path / "src.docx"
+    src.save(src_path)
+
+    doc = ingest(src_path)
+    note = next((n for n in doc.notes if "section break" in n), None)
+    assert note is not None and "landscape" in note.lower()
+
+
 def test_hyperlink_url_carried(tmp_path, profile):
     src = docx.Document()
     p = src.add_paragraph("See the ")

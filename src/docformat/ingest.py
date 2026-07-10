@@ -128,7 +128,33 @@ def ingest(source_path: str | Path) -> Document:
         source_path=str(source_path),
     )
     doc.notes.extend(stats.notes())
+    doc.notes.extend(_section_notes(src.element.body))
     return doc
+
+
+def _section_notes(body) -> list[str]:
+    """QA notes for structural section features the template can't carry:
+    mid-document section breaks and landscape pages. Page setup is the
+    template's job, so these are flagged rather than reconstructed."""
+    notes: list[str] = []
+    # Paragraph-level sectPr = a section break; the final body-level sectPr is
+    # the document's own and is not a break.
+    breaks = len(body.findall(f"{qn('w:p')}/{qn('w:pPr')}/{qn('w:sectPr')}"))
+    landscape = any(
+        pg_sz.get(qn("w:orient")) == "landscape" for pg_sz in body.iter(qn("w:pgSz"))
+    )
+    if breaks:
+        msg = (
+            f"{breaks} section break(s) in the source were not carried — the "
+            "template's page setup applies to the whole document."
+        )
+        if landscape:
+            msg += (
+                " One or more sections were landscape (e.g. a wide table); "
+                "re-create the landscape page(s) in Word if needed."
+            )
+        notes.append(msg)
+    return notes
 
 
 def _walk_body(container, src, blocks: list[Block], notes_ctx, stats: _Stats, numbering) -> None:
@@ -137,21 +163,39 @@ def _walk_body(container, src, blocks: list[Block], notes_ctx, stats: _Stats, nu
     from docx.table import Table
     from docx.text.paragraph import Paragraph
 
+    # A manual page break attaches to the NEXT emitted block. Break-only
+    # paragraphs are otherwise dropped as empty, so the flag has to survive them.
+    pending_break = False
     for el in container:
         if el.tag == qn("w:p"):
             para = Paragraph(el, src)
+            pPr = el.find(qn("w:pPr"))
+            has_pbb = pPr is not None and pPr.find(qn("w:pageBreakBefore")) is not None
+            has_break_run = any(
+                br.get(qn("w:type")) == "page" for br in el.iter(qn("w:br"))
+            )
             segments = _segments_for(el, para, src, notes_ctx, stats)
             text = "".join(s.text for s in segments if s.kind in ("text", "object"))
             leading_tabs = len(text) - len(text.lstrip("\t"))
             text = text.strip()
+            break_before = pending_break or has_pbb
+            # An inline break pushes the new page onto whatever follows.
+            pending_break = has_break_run
             if not text and not any(s.kind != "text" for s in segments):
+                pending_break = pending_break or break_before  # keep it for the next block
                 continue
-            blocks.append(
-                Block(text=text, hints=_hints_for(para, text, leading_tabs, numbering),
-                      segments=segments)
+            block = Block(
+                text=text,
+                hints=_hints_for(para, text, leading_tabs, numbering),
+                segments=segments,
+                page_break_before=break_before,
             )
+            blocks.append(block)
         elif el.tag == qn("w:tbl"):
-            blocks.append(_table_block(Table(el, src), src))
+            block = _table_block(Table(el, src), src)
+            block.page_break_before = pending_break
+            pending_break = False
+            blocks.append(block)
         elif el.tag == qn("w:sdt"):
             content = el.find(qn("w:sdtContent"))
             if content is not None:

@@ -26,7 +26,7 @@ from . import export as _export
 from . import ingest as _ingest
 from . import overrides as _overrides
 from . import qa as _qa
-from .template import TemplateProfile
+from .template import TemplateProfile, output_stem
 
 # Input types ingest understands directly or via convert.ensure_docx.
 SUPPORTED_SUFFIXES = {".docx", ".doc", ".odt", ".rtf", ".txt", ".md", ".markdown"}
@@ -86,7 +86,9 @@ def format_document(
         if overrides is not None and overrides.exists():
             _overrides.apply_overrides(doc, overrides)
 
-        styled = _apply.apply_styles(doc, profile, out_dir / (input.stem + "_formatted.docx"))
+        styled = _apply.apply_styles(
+            doc, profile, out_dir / f"{output_stem(profile, input.stem)}.docx"
+        )
         _elements.add_elements(styled, profile, doc)
         _qa.write_report(doc, out_dir / "qa_report.md")
 

@@ -54,7 +54,7 @@ def test_run_batch_summary_and_subfolders(tmp_path):
 
     # Each formatted doc gets its own subfolder with a report + document.
     assert (out / "input_messy" / "qa_report.md").exists()
-    assert (out / "input_messy" / "input_messy_formatted.docx").exists()
+    assert list((out / "input_messy").glob("*.docx"))  # named per output.filename
 
 
 def test_batch_applies_overrides_dir(tmp_path):
@@ -74,7 +74,8 @@ def test_batch_applies_overrides_dir(tmp_path):
     run_batch(collect_inputs([inp]), _profile(), out, pdf=False, overrides_dir=ov)
 
     import docx
-    d = docx.Document(str(out / "input_messy" / "input_messy_formatted.docx"))
+    formatted = next((out / "input_messy").glob("*.docx"))
+    d = docx.Document(str(formatted))
     styled = {p.text: p.style.name for p in d.paragraphs if p.text.startswith("Safety")}
     assert styled.get("Safety Precautions") == "Heading 2"
 

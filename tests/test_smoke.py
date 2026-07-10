@@ -9,6 +9,20 @@ def test_profile_loads():
     assert profile.raw["page"]["size"] in {"A4", "Letter"}
 
 
+def test_output_stem_honors_filename_template():
+    from datetime import date
+
+    from docformat.template import TemplateProfile, output_stem
+
+    profile = load_profile("config/template_profile.example.yaml")
+    stem = output_stem(profile, "my draft")
+    assert stem == f"my_draft_v1.0_{date.today().isoformat()}"
+
+    # No output.filename -> conventional fallback.
+    bare = TemplateProfile(name="x", template_file="t.docx", style_map={}, raw={})
+    assert output_stem(bare, "draft") == "draft_formatted"
+
+
 def test_ingest_sample():
     from docformat.ingest import ingest
 

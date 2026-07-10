@@ -26,7 +26,7 @@ from . import qa as _qa
 from .errors import friendly as _friendly
 from .errors import known_errors
 from .log import setup_logging
-from .template import apply_field_values, load_profile
+from .template import apply_field_values, load_profile, output_stem
 
 log = logging.getLogger("docformat.cli")
 
@@ -143,7 +143,7 @@ def _run_format(input, template, template_docx, out, set_field, ai, pdf, overrid
         typer.echo(f"Dry run — no document produced.\nPlan: {plan}\nQA: {out / 'qa_report.md'}")
         return
 
-    styled = _apply.apply_styles(doc, profile, out / (input.stem + "_formatted.docx"))
+    styled = _apply.apply_styles(doc, profile, out / f"{output_stem(profile, input.stem)}.docx")
     _elements.add_elements(styled, profile, doc)
     _qa.write_report(doc, out / "qa_report.md")
 

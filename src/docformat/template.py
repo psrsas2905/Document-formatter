@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 import yaml
@@ -20,6 +22,30 @@ class TemplateProfile:
     def style_for(self, label: str) -> str | None:
         """Return the template style name for a given BlockType value."""
         return self.style_map.get(label)
+
+
+def output_stem(profile: TemplateProfile, input_stem: str) -> str:
+    """Output filename stem (no extension) from the profile's `output.filename`.
+
+    Honors the {basename}, {version} and {date} tokens; falls back to
+    '<input>_formatted' when the profile sets no filename. The result is
+    sanitized to a safe filename.
+    """
+    output = profile.raw.get("output", {}) or {}
+    spec = output.get("filename")
+    if not spec:
+        return f"{input_stem}_formatted"
+    tokens = {
+        "{basename}": input_stem,
+        "{version}": str(output.get("version", "")),
+        "{date}": date.today().isoformat(),
+    }
+    for token, value in tokens.items():
+        spec = spec.replace(token, value)
+    # Drop characters no filesystem accepts; collapse whitespace to underscores.
+    spec = re.sub(r'[<>:"/\\|?*]', "", spec)
+    spec = re.sub(r"\s+", "_", spec.strip()).strip("._")
+    return spec or f"{input_stem}_formatted"
 
 
 def apply_field_values(profile: TemplateProfile, values: dict[str, str]) -> None:

@@ -1,26 +1,34 @@
 """Command-line interface for docformat.
 
 `docformat format INPUT --template PROFILE --out DIR`
+`docformat gui`
 
-The pipeline is wired end-to-end here. Individual stages currently raise
-NotImplementedError; implement them per PROJECT_SPEC in build order.
+Known failure classes surface as one-line human messages; full tracebacks go
+to the rotating log file (see log.py for its per-OS location).
 """
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import typer
 
+from . import __version__
 from . import apply as _apply
 from . import classify as _classify
-from . import convert as _convert
 from . import classify_ai as _classify_ai
+from . import convert as _convert
 from . import elements as _elements
 from . import export as _export
 from . import ingest as _ingest
 from . import qa as _qa
+from .errors import friendly as _friendly
+from .errors import known_errors
+from .log import setup_logging
 from .template import apply_field_values, load_profile
+
+log = logging.getLogger("docformat.cli")
 
 
 def _parse_set_options(pairs: list[str]) -> dict[str, str]:
@@ -32,17 +40,32 @@ def _parse_set_options(pairs: list[str]) -> dict[str, str]:
         values[key.strip()] = value.strip()
     return values
 
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"docformat {__version__}")
+        raise typer.Exit()
+
+
 app = typer.Typer(help="Turn raw Word drafts into publish-ready, template-conformant documents.")
 
 
 @app.callback()
-def _main() -> None:
+def _main(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show the docformat version and exit.",
+    ),
+) -> None:
     """Keep 'format' as an explicit subcommand (docformat format INPUT ...)."""
 
 
 @app.command()
 def format(
-    input: Path = typer.Argument(..., exists=True, help="Source .docx to format."),
+    input: Path = typer.Argument(..., exists=True, help="Source document to format."),
     template: Path = typer.Option(..., "--template", "-t", help="Path to template_profile.yaml."),
     template_docx: Path | None = typer.Option(
         None,
@@ -63,6 +86,25 @@ def format(
     pdf: bool = typer.Option(True, "--pdf/--no-pdf", help="Also export a PDF."),
 ) -> None:
     """Run the full formatting pipeline on INPUT."""
+    log_file = setup_logging()
+    log.info("docformat %s: format %s (template %s)", __version__, input, template)
+    try:
+        _run_format(input, template, template_docx, out, set_field, ai, pdf)
+    except known_errors() as exc:
+        log.exception("format failed")
+        typer.secho(f"Error: {_friendly(exc)}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+    except Exception as exc:  # anything else: keep the user message short
+        log.exception("format crashed")
+        typer.secho(
+            f"Unexpected error: {exc}\nDetails were written to {log_file}",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=1) from exc
+
+
+def _run_format(input, template, template_docx, out, set_field, ai, pdf) -> None:
     out.mkdir(parents=True, exist_ok=True)
     profile = load_profile(template)
     if template_docx is not None:
@@ -102,11 +144,17 @@ def gui(
     """Launch the local web GUI (everything stays on this machine)."""
     from . import gui as _gui
 
+    setup_logging()
     profile_path = template or _gui.default_profile_path()
     if profile_path is None or not Path(profile_path).exists():
         raise typer.BadParameter(
             "No template profile found — pass one with --template path/to/profile.yaml"
         )
+    try:
+        load_profile(profile_path)  # fail fast with a friendly message
+    except ValueError as exc:
+        typer.secho(f"Error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
     _gui.serve(Path(profile_path), port=port, open_browser=browser)
 
 

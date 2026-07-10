@@ -11,7 +11,9 @@ from __future__ import annotations
 import email.parser
 import email.policy
 import json
+import logging
 import re
+import shutil
 import sys
 import tempfile
 import threading
@@ -29,6 +31,8 @@ from . import export as _export
 from . import ingest as _ingest
 from . import qa as _qa
 from .classify import CONFIDENCE_THRESHOLD
+from .errors import friendly as _friendly
+from .errors import known_errors as _known_errors
 from .template import apply_field_values, load_profile
 
 _ASSET = Path(__file__).parent / "assets" / "gui.html"
@@ -51,16 +55,46 @@ def default_profile_path() -> Path | None:
     return None
 
 
+MAX_UPLOAD_BYTES = 100 * 2**20  # cap request bodies at 100 MB
+MAX_SESSIONS = 20  # oldest session dirs are evicted (and deleted) beyond this
+
+_log = logging.getLogger("docformat.gui")
+
+
 class _Handler(BaseHTTPRequestHandler):
     server_version = "docformat"
     protocol_version = "HTTP/1.1"  # keep-alive; we always send Content-Length
+    timeout = 60  # a stalled client can't pin a handler thread forever
     profile_path: Path  # set by serve()
     sessions: dict[str, Path]  # sid -> output dir
     work_dir: Path
 
+    # -- request guards ----------------------------------------------------
+    #
+    # The server binds 127.0.0.1, but browsers will happily POST here from
+    # any web page (multipart is a CORS "simple" request) and DNS rebinding
+    # defeats same-origin checks — so validate Host on everything and Origin
+    # on state-changing requests.
+
+    def _host_ok(self) -> bool:
+        host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]")
+        return host in ("127.0.0.1", "localhost", "::1")
+
+    def _origin_ok(self) -> bool:
+        origin = self.headers.get("Origin")
+        if origin is None:
+            return True  # non-browser clients (curl, tests) send no Origin
+        return origin.startswith(("http://127.0.0.1:", "http://localhost:")) or origin in (
+            "http://127.0.0.1",
+            "http://localhost",
+        )
+
     # -- routing ---------------------------------------------------------
 
     def do_GET(self):
+        if not self._host_ok():
+            self._send(403, "text/plain", b"forbidden host")
+            return
         if self.path in ("/", "/index.html"):
             self._send(200, "text/html; charset=utf-8", _ASSET.read_bytes())
             return
@@ -83,15 +117,35 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(404, "text/plain", b"not found")
 
     def do_POST(self):
+        if not self._host_ok() or not self._origin_ok():
+            self._send(403, "application/json", b'{"error": "forbidden origin"}')
+            return
         if self.path != "/format":
             self._send(404, "text/plain", b"not found")
+            return
+        if int(self.headers.get("Content-Length", "0")) > MAX_UPLOAD_BYTES:
+            self._send(
+                413,
+                "application/json",
+                json.dumps({"error": "Upload too large (limit 100 MB)."}).encode(),
+            )
             return
         try:
             fields = self._read_multipart()
             result = self._run_pipeline(fields)
             self._send(200, "application/json", json.dumps(result).encode())
-        except Exception as exc:  # surface the reason to the page, not a stack trace
-            self._send(400, "application/json", json.dumps({"error": str(exc)}).encode())
+        except _known_errors() as exc:  # expected failures: message is safe to show
+            _log.warning("format request failed: %s", exc)
+            self._send(400, "application/json", json.dumps({"error": _friendly(exc)}).encode())
+        except Exception:
+            _log.exception("format request crashed")
+            self._send(
+                500,
+                "application/json",
+                json.dumps(
+                    {"error": "Unexpected error — details are in the docformat log file."}
+                ).encode(),
+            )
 
     # -- pipeline ---------------------------------------------------------
 
@@ -104,6 +158,9 @@ class _Handler(BaseHTTPRequestHandler):
         session = self.work_dir / sid
         session.mkdir(parents=True)
         self.sessions[sid] = session
+        while len(self.sessions) > MAX_SESSIONS:  # evict + delete the oldest
+            old_sid = next(iter(self.sessions))
+            shutil.rmtree(self.sessions.pop(old_sid), ignore_errors=True)
 
         src_name = Path(source[0]).name or "draft.docx"
         src_path = session / src_name
@@ -190,8 +247,8 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
         self.wfile.flush()
 
-    def log_message(self, fmt, *args):  # keep the console clean
-        pass
+    def log_message(self, fmt, *args):  # keep the console clean; log to file
+        _log.debug("%s %s", self.address_string(), fmt % args)
 
 
 def make_server(profile_path: Path, port: int = 0) -> ThreadingHTTPServer:
@@ -210,7 +267,15 @@ def make_server(profile_path: Path, port: int = 0) -> ThreadingHTTPServer:
 
 def serve(profile_path: Path, port: int = 8765, open_browser: bool = True) -> None:
     """Run the GUI until Ctrl+C."""
-    server = make_server(profile_path, port)
+    try:
+        server = make_server(profile_path, port)
+    except OSError:
+        # Port taken — most likely docformat is already running (double-launch).
+        print(
+            f"Port {port} is busy (is docformat already running at "
+            f"http://127.0.0.1:{port}/ ?). Starting on a free port instead."
+        )
+        server = make_server(profile_path, 0)
     url = f"http://127.0.0.1:{server.server_port}/"
     print(f"docformat GUI running at {url}  (Ctrl+C to stop)")
     if open_browser:
@@ -221,3 +286,4 @@ def serve(profile_path: Path, port: int = 8765, open_browser: bool = True) -> No
         print("\nStopped.")
     finally:
         server.server_close()
+        shutil.rmtree(server.RequestHandlerClass.work_dir, ignore_errors=True)

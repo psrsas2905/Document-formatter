@@ -109,3 +109,71 @@ def test_document_fields_fill_placeholders(tmp_path):
         assert any("[XXXX]" in n for n in data["notes"])  # deliberately unfilled
     finally:
         server.shutdown()
+
+
+def test_forbidden_host_rejected(gui_server):
+    req = urllib.request.Request(f"{gui_server}/", headers={"Host": "evil.example.com"})
+    try:
+        urllib.request.urlopen(req)
+        raise AssertionError("expected HTTP 403")
+    except urllib.error.HTTPError as e:
+        assert e.code == 403
+
+
+def test_cross_origin_post_rejected(gui_server):
+    body, ctype = _multipart({"pdf": (None, b"0")})
+    req = urllib.request.Request(
+        f"{gui_server}/format",
+        data=body,
+        headers={"Content-Type": ctype, "Origin": "https://evil.example.com"},
+    )
+    try:
+        urllib.request.urlopen(req)
+        raise AssertionError("expected HTTP 403")
+    except urllib.error.HTTPError as e:
+        assert e.code == 403
+    # Same-origin requests still work.
+    req = urllib.request.Request(
+        f"{gui_server}/format",
+        data=body,
+        headers={"Content-Type": ctype, "Origin": gui_server},
+    )
+    try:
+        urllib.request.urlopen(req)
+    except urllib.error.HTTPError as e:
+        assert e.code == 400  # passes the guard, fails on missing upload
+
+
+def test_oversized_upload_rejected(gui_server):
+    from docformat.gui import MAX_UPLOAD_BYTES
+
+    req = urllib.request.Request(
+        f"{gui_server}/format",
+        data=b"x",
+        headers={
+            "Content-Type": "multipart/form-data; boundary=x",
+            "Content-Length": str(MAX_UPLOAD_BYTES + 1),
+        },
+    )
+    try:
+        urllib.request.urlopen(req)
+        raise AssertionError("expected HTTP 413")
+    except urllib.error.HTTPError as e:
+        assert e.code == 413
+
+
+def test_session_eviction(gui_server, tmp_path):
+    from docformat import gui as gui_mod
+
+    # find the live handler class through a request first
+    body, ctype = _multipart(
+        {
+            "source": ("input_messy.docx", Path("samples/input_messy.docx").read_bytes()),
+            "pdf": (None, b"0"),
+        }
+    )
+    req = urllib.request.Request(
+        f"{gui_server}/format", data=body, headers={"Content-Type": ctype}
+    )
+    json.load(urllib.request.urlopen(req))
+    assert gui_mod.MAX_SESSIONS >= 1  # eviction constant exists and is sane

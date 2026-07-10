@@ -84,12 +84,24 @@ def format(
     ),
     ai: bool = typer.Option(False, "--ai", help="Use optional local-AI classifier (offline)."),
     pdf: bool = typer.Option(True, "--pdf/--no-pdf", help="Also export a PDF."),
+    overrides: Path | None = typer.Option(
+        None,
+        "--overrides",
+        exists=True,
+        help="Apply hand-pinned classifications from a plan file (see --dry-run).",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Preview classification only: write an editable overrides plan + "
+        "qa_report, produce no document.",
+    ),
 ) -> None:
     """Run the full formatting pipeline on INPUT."""
     log_file = setup_logging()
     log.info("docformat %s: format %s (template %s)", __version__, input, template)
     try:
-        _run_format(input, template, template_docx, out, set_field, ai, pdf)
+        _run_format(input, template, template_docx, out, set_field, ai, pdf, overrides, dry_run)
     except known_errors() as exc:
         log.exception("format failed")
         typer.secho(f"Error: {_friendly(exc)}", fg=typer.colors.RED, err=True)
@@ -104,7 +116,9 @@ def format(
         raise typer.Exit(code=1) from exc
 
 
-def _run_format(input, template, template_docx, out, set_field, ai, pdf) -> None:
+def _run_format(input, template, template_docx, out, set_field, ai, pdf, overrides, dry_run) -> None:
+    from . import overrides as _overrides
+
     out.mkdir(parents=True, exist_ok=True)
     profile = load_profile(template)
     if template_docx is not None:
@@ -118,6 +132,16 @@ def _run_format(input, template, template_docx, out, set_field, ai, pdf) -> None
 
     doc = _ingest.ingest(source)
     doc = _classify_ai.classify_ai(doc) if ai else _classify.classify(doc)
+
+    if overrides is not None:
+        applied = _overrides.apply_overrides(doc, overrides)
+        typer.echo(f"Applied {applied} classification override(s) from {overrides.name}")
+
+    if dry_run:
+        plan = _overrides.write_plan(doc, out / (input.stem + "_overrides.yaml"), str(input))
+        _qa.write_report(doc, out / "qa_report.md")
+        typer.echo(f"Dry run — no document produced.\nPlan: {plan}\nQA: {out / 'qa_report.md'}")
+        return
 
     styled = _apply.apply_styles(doc, profile, out / (input.stem + "_formatted.docx"))
     _elements.add_elements(styled, profile, doc)

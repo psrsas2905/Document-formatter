@@ -242,3 +242,28 @@ def test_preset_profiles_load():
         assert set(profile.style_map) == {
             "Heading1", "Heading2", "Heading3", "Body", "Caption", "ListItem", "Quote",
         }
+
+
+def test_soffice_discovery(monkeypatch, tmp_path):
+    from docformat import soffice
+
+    fake = tmp_path / "soffice"
+    fake.write_text("#!/bin/sh\n")
+    monkeypatch.setenv("DOCFORMAT_SOFFICE", str(fake))
+    assert soffice.find_soffice() == str(fake)
+
+    monkeypatch.setenv("DOCFORMAT_SOFFICE", str(tmp_path / "missing"))
+    found = soffice.find_soffice()  # bad override ignored, falls back
+    assert found != str(tmp_path / "missing")
+
+
+def test_txt_cp1252_fallback(tmp_path):
+    import docx
+
+    from docformat.convert import ensure_docx
+
+    src = tmp_path / "draft.txt"
+    src.write_bytes("Smart \x93quotes\x94 and \x96 dashes.".encode("latin-1"))
+    out = ensure_docx(src, tmp_path / "conv")
+    text = docx.Document(str(out)).paragraphs[0].text
+    assert "“quotes”" in text and "–" in text

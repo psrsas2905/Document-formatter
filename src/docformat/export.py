@@ -9,10 +9,11 @@ grows), then stores a *tagged* PDF. Everything runs locally; no network.
 
 from __future__ import annotations
 
-import shutil
-import subprocess
 import tempfile
 from pathlib import Path
+
+from . import soffice as _soffice
+from .soffice import soffice_available  # re-exported; used across the codebase
 
 _MACRO_XBA = """<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE script:module PUBLIC "-//OpenOffice.org//DTD OfficeDocument 1.0//EN" "module.dtd">
@@ -57,42 +58,31 @@ _SCRIPT_XLC = """<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
-def soffice_available() -> bool:
-    """True if the LibreOffice 'soffice' binary is on PATH."""
-    return shutil.which("soffice") is not None
-
-
 def export_pdf(docx_path: str | Path, out_dir: str | Path) -> Path:
     """Refresh fields/TOC and convert a .docx to a tagged PDF, fully offline."""
     docx_path = Path(docx_path).resolve()
     out_dir = Path(out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     if not soffice_available():
-        raise RuntimeError(
-            "LibreOffice ('soffice') not found on PATH. Install it for offline PDF export."
-        )
+        raise RuntimeError(_soffice.missing_message())
 
     pdf_path = out_dir / (docx_path.stem + ".pdf")
+    # A stale PDF from a previous run must not mask a failed export.
+    pdf_path.unlink(missing_ok=True)
+
     with tempfile.TemporaryDirectory(prefix="docformat_lo_") as tmp:
         profile = _seed_profile(Path(tmp))
         macro = (
             "macro:///Standard.Module1.RefreshExport("
             f'"{docx_path.as_uri()}","{pdf_path.as_uri()}")'
         )
-        subprocess.run(
-            [
-                "soffice",
-                f"-env:UserInstallation={profile.as_uri()}",
-                "--headless",
-                "--norestore",
-                macro,
-            ],
-            check=True,
-            capture_output=True,
-        )
+        _soffice.run_soffice(["--headless", "--norestore", macro], profile_dir=profile)
 
     if not pdf_path.exists():
-        raise RuntimeError(f"LibreOffice did not produce {pdf_path}")
+        raise RuntimeError(
+            f"LibreOffice did not produce {pdf_path.name}. The document may be "
+            "corrupt, or a LibreOffice dialog blocked the export."
+        )
     return pdf_path
 
 
@@ -104,15 +94,8 @@ def _seed_profile(tmp: Path) -> Path:
     macro files for the real run.
     """
     profile = tmp / "profile"
-    subprocess.run(
-        [
-            "soffice",
-            f"-env:UserInstallation={profile.as_uri()}",
-            "--headless",
-            "--terminate_after_init",
-        ],
-        check=True,
-        capture_output=True,
+    _soffice.run_soffice(
+        ["--headless", "--terminate_after_init"], timeout=120, profile_dir=profile
     )
     basic = profile / "user" / "basic"
     (basic / "Standard").mkdir(parents=True, exist_ok=True)

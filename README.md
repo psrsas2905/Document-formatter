@@ -156,8 +156,10 @@ carries through, content-intact:
 - **Footnotes** — re-attached (plain text; flagged in the QA report)
 - **Inline emphasis** — bold/italic *inside* body text survives; uniform
   whole-paragraph bold (pseudo-heading decoration) is replaced by the style
-- **Character formatting** — sub/superscript (x², H₂O) always survive; underline
-  and strikethrough are kept as inline emphasis
+- **Character formatting** — sub/superscript (x², H₂O) always survive; underline,
+  strikethrough and highlighter marks are kept as inline emphasis
+- **Manual page breaks** — intentional Ctrl+Enter / "page break before"
+  pagination is preserved (section breaks and landscape pages are QA-flagged)
 - **Ordered vs bullet lists** — "1."/"a)" lists keep their numbering (mapped to
   the template's numbered-list style), bullets stay bullets
 - MathType/OLE objects can't be carried — the QA report lists each one

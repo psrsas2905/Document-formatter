@@ -330,6 +330,7 @@ def _run_segments(r_el, para, src, notes_ctx, stats: _Stats, link) -> list[Segme
                 subscript=_effective(font.subscript, style, "subscript"),
                 underline=_effective(font.underline, style, "underline"),
                 strike=_effective(font.strike, style, "strike"),
+                highlight=_highlight_of(r_el),
                 link=link,
             )
         )
@@ -490,6 +491,19 @@ def _hints_for(para, text: str, leading_tabs: int, numbering: dict) -> FormatHin
         list_ordered=list_ordered,
         list_level=list_level,
     )
+
+
+def _highlight_of(r_el) -> str | None:
+    """The run's highlighter colour (w:highlight val), or None. Direct run
+    formatting only — highlight is a manual mark, not a style default."""
+    rpr = r_el.find(qn("w:rPr"))
+    if rpr is None:
+        return None
+    hl = rpr.find(qn("w:highlight"))
+    if hl is None:
+        return None
+    val = hl.get(qn("w:val"))
+    return val if val and val != "none" else None
 
 
 def _effective(run_value, style, attr: str) -> bool:

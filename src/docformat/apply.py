@@ -148,6 +148,10 @@ def _emit_paragraph(out, block, style, footnotes: FootnoteWriter) -> int:
                     run.font.underline = True
                 if seg.strike and not uniform_strike:
                     run.font.strike = True
+                # Highlight is an author annotation, never heading decoration —
+                # carry it whenever present (not dropped on uniform paragraphs).
+                if seg.highlight:
+                    _set_highlight(run, seg.highlight)
         elif seg.kind == "math":
             para._p.append(parse_xml(seg.xml))
             lead_pending = False
@@ -169,6 +173,16 @@ def _emit_paragraph(out, block, style, footnotes: FootnoteWriter) -> int:
                 para.add_run(seg.text)
             objects += 1
     return objects
+
+
+def _set_highlight(run, value: str) -> None:
+    """Apply a highlighter colour (OOXML w:highlight) to a run."""
+    from docx.oxml import OxmlElement
+
+    rpr = run._element.get_or_add_rPr()
+    hl = OxmlElement("w:highlight")
+    hl.set(qn("w:val"), value)
+    rpr.append(hl)
 
 
 RT_HYPERLINK = (

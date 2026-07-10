@@ -90,6 +90,10 @@ def test_character_formatting_preserved(result):
 
     assert bool(runs["thermal budget"].font.underline) is True
     assert bool(runs["old 5 W limit"].font.strike) is True
+    # Highlighter marks (author annotations) survive.
+    from docx.enum.text import WD_COLOR_INDEX
+    assert runs["Confirm the tolerance"].font.highlight_color == WD_COLOR_INDEX.YELLOW
     # Plain text stays plain.
     assert not runs["The coolant is "].font.underline
     assert not runs["The coolant is "].font.strike
+    assert runs["The coolant is "].font.highlight_color is None

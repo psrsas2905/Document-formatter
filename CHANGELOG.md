@@ -15,6 +15,10 @@
 - **Word-native ordered lists**: ribbon-numbered lists (`w:numPr` with a
   decimal/letter/roman format) now map to `ListNumber`, not bullets — resolved
   from `numbering.xml`.
+- **Manual page breaks** (Ctrl+Enter / `pageBreakBefore`) are carried through;
+  mid-document **section breaks** and **landscape** pages are QA-flagged rather
+  than reconstructed (the template owns page setup).
+- **Highlighter marks** are preserved as inline author annotations.
 
 ## Unreleased — Tier 3 (versatility)
 

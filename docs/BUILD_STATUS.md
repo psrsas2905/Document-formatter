@@ -72,8 +72,9 @@ locations; override with `DOCFORMAT_SOFFICE=/path/to/soffice`.
 - Footnotes carry as plain text (formatting inside notes dropped; QA-noted).
 - Tracked changes are auto-accepted (QA-noted) — accept/reject in Word first
   if that matters.
-- Character formatting: sub/superscript, underline and strikethrough are now
-  preserved; highlight is still dropped (the template governs colour).
+- Character formatting: sub/superscript, underline, strikethrough and highlighter
+  marks are preserved. Manual page breaks are carried; section breaks and
+  landscape pages are QA-flagged (the template owns page setup).
 - Classifier heuristics are English-oriented (CJK/RTL is still Tier 3), though
   the template/geometry side of the GB/T preset works.
 - Ordered lists: typed "1."/"a)" lists map to the numbered style; Word-native

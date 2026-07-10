@@ -50,6 +50,9 @@ class Segment:
     subscript: bool = False
     underline: bool = False
     strike: bool = False
+    # Highlighter colour (OOXML w:highlight value, e.g. "yellow") — an author
+    # annotation, not template styling, so it is carried like other emphasis.
+    highlight: str | None = None
     xml: str | None = None
     blob: bytes | None = None
     ext: str = "png"

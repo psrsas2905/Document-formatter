@@ -31,7 +31,6 @@ from . import elements as _elements
 from . import export as _export
 from . import ingest as _ingest
 from . import qa as _qa
-from .classify import CONFIDENCE_THRESHOLD
 from .errors import friendly as _friendly
 from .errors import known_errors as _known_errors
 from .template import apply_field_values, load_profile
@@ -43,6 +42,15 @@ _CONTENT_TYPES = {
     ".pdf": "application/pdf",
     ".md": "text/markdown; charset=utf-8",
 }
+
+
+def _ai_available() -> bool:
+    """True if a local Ollama model is actually reachable (offline probe).
+    Never raises — the AI path is optional and degrades to heuristics."""
+    try:
+        return _classify_ai._pick_model() is not None
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def default_profile_path() -> Path | None:
@@ -100,6 +108,9 @@ class _Handler(BaseHTTPRequestHandler):
             page = _ASSET.read_bytes().replace(b"__VERSION__", __version__.encode())
             self._send(200, "text/html; charset=utf-8", page)
             return
+        if self.path == "/meta":
+            self._send(200, "application/json", json.dumps(self._meta()).encode())
+            return
         if self.path == "/favicon.ico":
             svg = (
                 '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">'
@@ -148,6 +159,22 @@ class _Handler(BaseHTTPRequestHandler):
                     {"error": "Unexpected error — details are in the docformat log file."}
                 ).encode(),
             )
+
+    # -- metadata ---------------------------------------------------------
+
+    def _meta(self) -> dict:
+        """What the front end needs to be honest up front: the active profile
+        name and whether PDF export (LibreOffice) and AI assist (Ollama) can
+        actually run on this machine."""
+        try:
+            profile_name = load_profile(self.profile_path).name
+        except Exception:  # noqa: BLE001 — a bad profile shouldn't 500 the page
+            profile_name = "(profile could not be loaded)"
+        return {
+            "profile": profile_name,
+            "pdf_available": _export.soffice_available(),
+            "ai_available": _ai_available(),
+        }
 
     # -- pipeline ---------------------------------------------------------
 
@@ -202,9 +229,14 @@ class _Handler(BaseHTTPRequestHandler):
             pdf_path = _export.export_pdf(styled, session)
 
         review = [
-            {"label": b.label.value, "confidence": b.confidence, "text": b.text[:120]}
-            for b in doc.blocks
-            if b.confidence < CONFIDENCE_THRESHOLD
+            {
+                "index": i,  # 1-based position, so the writer can find the block
+                "label": b.label.value,
+                "confidence": b.confidence,
+                "text": b.text[:120],
+            }
+            for i, b in enumerate(doc.blocks, 1)
+            if _qa.needs_review(b)
         ]
         return {
             "docx": f"/files/{sid}/{styled.name}",

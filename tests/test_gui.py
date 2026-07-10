@@ -63,6 +63,30 @@ def test_format_roundtrip_with_brand_template(gui_server):
     assert "Safety Precautions" in qa_text
 
 
+def test_meta_reports_profile_and_capabilities(gui_server):
+    meta = json.load(urllib.request.urlopen(f"{gui_server}/meta"))
+    assert meta["profile"] == "Acme Corp Standard v3"
+    # Booleans reflecting whether LibreOffice / Ollama are usable on this machine.
+    assert isinstance(meta["pdf_available"], bool)
+    assert isinstance(meta["ai_available"], bool)
+
+
+def test_review_rows_carry_block_index(gui_server):
+    body, ctype = _multipart(
+        {
+            "source": ("input_messy.docx", Path("samples/input_messy.docx").read_bytes()),
+            "pdf": (None, b"0"),
+        }
+    )
+    req = urllib.request.Request(
+        f"{gui_server}/format", data=body, headers={"Content-Type": ctype}
+    )
+    data = json.load(urllib.request.urlopen(req))
+    assert data["review"], "sample has a low-confidence block"
+    row = data["review"][0]
+    assert isinstance(row["index"], int) and 1 <= row["index"] <= data["total_blocks"]
+
+
 def test_bad_upload_reports_error(gui_server):
     body, ctype = _multipart({"source": ("nope.docx", b"this is not a docx"), "pdf": (None, b"0")})
     req = urllib.request.Request(

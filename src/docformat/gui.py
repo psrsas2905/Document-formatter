@@ -228,9 +228,11 @@ class _Handler(BaseHTTPRequestHandler):
                 )
             pdf_path = _export.export_pdf(styled, session)
 
+        anchors = _qa.heading_anchors(doc)
         review = [
             {
                 "index": i,  # 1-based position, so the writer can find the block
+                "anchor": anchors[i - 1],  # nearest heading above it (or null)
                 "label": b.label.value,
                 "confidence": b.confidence,
                 "text": b.text[:120],

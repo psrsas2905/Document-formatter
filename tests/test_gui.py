@@ -85,6 +85,7 @@ def test_review_rows_carry_block_index(gui_server):
     assert data["review"], "sample has a low-confidence block"
     row = data["review"][0]
     assert isinstance(row["index"], int) and 1 <= row["index"] <= data["total_blocks"]
+    assert row["anchor"] == "Overview"  # nearest heading above the flagged block
 
 
 def test_bad_upload_reports_error(gui_server):

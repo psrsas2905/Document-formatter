@@ -73,3 +73,23 @@ def test_table_block_classified(result):
     doc, _ = result
     tables = [b for b in doc.blocks if b.label is BlockType.TABLE]
     assert len(tables) == 1 and tables[0].confidence == 1.0
+
+
+def test_character_formatting_preserved(result):
+    """Sub/superscript (meaning) plus underline/strike (inline emphasis) survive."""
+    _, styled = result
+    out = docx.Document(str(styled))
+    para = next(p for p in out.paragraphs if p.text.startswith("The coolant is"))
+    runs = {r.text: r for r in para.runs if r.text}
+
+    # H₂O and v² — the digit runs carry vertAlign, not the letters.
+    assert runs["H"].font.subscript in (None, False)
+    subscripts = [r.text for r in para.runs if r.font.subscript]
+    superscripts = [r.text for r in para.runs if r.font.superscript]
+    assert subscripts == ["2"] and superscripts == ["2"]
+
+    assert bool(runs["thermal budget"].font.underline) is True
+    assert bool(runs["old 5 W limit"].font.strike) is True
+    # Plain text stays plain.
+    assert not runs["The coolant is "].font.underline
+    assert not runs["The coolant is "].font.strike

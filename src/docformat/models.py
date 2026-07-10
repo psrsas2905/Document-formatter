@@ -29,7 +29,8 @@ class Segment:
     """One inline piece of a paragraph, in source order.
 
     kind:
-      - "text":     `text` plus inline bold/italic emphasis
+      - "text":     `text` plus inline bold/italic emphasis and semantic
+                    character formatting (super/subscript, underline, strike)
       - "math":     `xml` holds the original OMML (carried verbatim)
       - "image":    `blob`/`ext` hold the picture; size in EMU; `alt` its alt text
       - "footnote": `text` holds the footnote body text (re-attached on output)
@@ -41,6 +42,13 @@ class Segment:
     text: str = ""
     bold: bool = False
     italic: bool = False
+    # Semantic character formatting. superscript/subscript carry *meaning*
+    # (x², H₂O) and are preserved on every block; underline/strike are inline
+    # emphasis, kept like bold/italic (Body/List/Quote, when not decorative).
+    superscript: bool = False
+    subscript: bool = False
+    underline: bool = False
+    strike: bool = False
     xml: str | None = None
     blob: bytes | None = None
     ext: str = "png"

@@ -84,6 +84,20 @@ def main() -> None:
     inline.add_run().add_picture(str(logo), width=Pt(11), height=Pt(11))
     inline.add_run(" with the silkscreen arrow before fastening.")
 
+    # Semantic character formatting: sub/superscript carry meaning, plus an
+    # underlined term and a struck-through correction.
+    chem = doc.add_paragraph("The coolant is ")
+    chem.add_run("H")
+    chem.add_run("2").font.subscript = True
+    chem.add_run("O; dissipation scales with ")
+    chem.add_run("v")
+    chem.add_run("2").font.superscript = True
+    chem.add_run(". The ")
+    chem.add_run("thermal budget").font.underline = True
+    chem.add_run(" is fixed; the ")
+    chem.add_run("old 5 W limit").font.strike = True
+    chem.add_run(" no longer applies.")
+
     doc.save(out)
     _add_footnote(out)
     print(f"Wrote {out}")

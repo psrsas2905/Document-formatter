@@ -106,6 +106,10 @@ def _emit_paragraph(out, block, style, footnotes: FootnoteWriter) -> int:
     texts = [s for s in segments if s.kind == "text" and s.text.strip()]
     uniform_bold = bool(texts) and all(s.bold for s in texts)
     uniform_italic = bool(texts) and all(s.italic for s in texts)
+    # Underline/strike are inline emphasis like bold/italic — a paragraph that is
+    # uniformly underlined was decorative styling the named style now owns.
+    uniform_underline = bool(texts) and all(s.underline for s in texts)
+    uniform_strike = bool(texts) and all(s.strike for s in texts)
     keep_emphasis = block.label in _EMPHASIS_LABELS
     objects = 0
     lead_pending = True  # strip indentation/list markers from the leading text
@@ -125,11 +129,22 @@ def _emit_paragraph(out, block, style, footnotes: FootnoteWriter) -> int:
                 _append_hyperlink(out, para, text, seg.link)
                 continue
             run = para.add_run(text)
+            # Super/subscript carry meaning (x², H₂O) — preserve on every block,
+            # never treated as decorative. vertAlign holds one value, so a run is
+            # at most one of the two.
+            if seg.superscript:
+                run.font.superscript = True
+            elif seg.subscript:
+                run.font.subscript = True
             if keep_emphasis:
                 if seg.bold and not uniform_bold:
                     run.font.bold = True
                 if seg.italic and not uniform_italic:
                     run.font.italic = True
+                if seg.underline and not uniform_underline:
+                    run.font.underline = True
+                if seg.strike and not uniform_strike:
+                    run.font.strike = True
         elif seg.kind == "math":
             para._p.append(parse_xml(seg.xml))
             lead_pending = False

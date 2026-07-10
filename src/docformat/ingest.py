@@ -270,12 +270,20 @@ def _run_segments(r_el, para, src, notes_ctx, stats: _Stats, link) -> list[Segme
     run = Run(r_el, para)
     if run.text:
         style = para.style
+        font = run.font
         segments.append(
             Segment(
                 kind="text",
                 text=run.text,
-                bold=_effective(run.font.bold, style, "bold"),
-                italic=_effective(run.font.italic, style, "italic"),
+                bold=_effective(font.bold, style, "bold"),
+                italic=_effective(font.italic, style, "italic"),
+                # Semantic character formatting. superscript/subscript come from
+                # w:vertAlign; underline may be an enum (WD_UNDERLINE.*) so we
+                # coerce to a plain bool.
+                superscript=_effective(font.superscript, style, "superscript"),
+                subscript=_effective(font.subscript, style, "subscript"),
+                underline=_effective(font.underline, style, "underline"),
+                strike=_effective(font.strike, style, "strike"),
                 link=link,
             )
         )
@@ -395,9 +403,11 @@ def _hints_for(para, text: str, leading_tabs: int) -> FormatHints:
 
 
 def _effective(run_value, style, attr: str) -> bool:
-    """Resolve a run's tri-state font attribute, falling back to the paragraph style."""
+    """Resolve a run's tri-state font attribute, falling back to the paragraph
+    style. Coerced to a plain bool — font.underline may be a WD_UNDERLINE enum
+    (e.g. SINGLE) rather than True/False."""
     if run_value is not None:
-        return run_value
+        return bool(run_value)
     font = getattr(style, "font", None)
     return bool(font is not None and getattr(font, attr))
 

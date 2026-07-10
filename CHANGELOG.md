@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased — Tier 4 (real-world readiness)
+
+- **GUI honesty & polish**: the local web app now shows the active template
+  profile up front; disables PDF export with a note when LibreOffice isn't
+  installed; annotates the AI option honestly when Ollama isn't running; shows
+  an elapsed-time counter during formatting; and lists each flagged block's
+  index (matching the `--overrides` plan) in the review table.
+- **Honest AI fallback**: requesting AI assist when no local Ollama model is
+  reachable now records a QA note (CLI and GUI) instead of silently presenting
+  rule-based labels as AI-reviewed.
+
 ## Unreleased — Tier 3 (versatility)
 
 Post-pilot versatility features, built on the v1 pipeline:

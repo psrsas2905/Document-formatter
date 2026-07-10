@@ -52,10 +52,10 @@ remains, in priority order.
       colour the template governs, not clearly semantic.)
 - [x] Honor `output.filename` profile setting — `template.output_stem`.
 - [x] ListNumber block type so manual "1." lists map to `List Number`.
-- [ ] GUI: show active profile, progress during PDF export, block anchors in
-      the review table, honest signal when --ai is checked but Ollama absent.
-      (inspect-template's placeholder extraction is ready to feed GUI field
-      auto-suggestion.)
+- [x] GUI: show active profile, progress during PDF export, block anchors in
+      the review table, honest signal when --ai is checked but Ollama absent
+      (`/meta` endpoint, `gui.html`). (inspect-template's placeholder extraction
+      is still available to feed GUI field auto-suggestion — not wired yet.)
 - [ ] Sections/page breaks/landscape carried or QA-flagged; text-box content
       carry (currently QA-flagged only); VML image conversion.
 - [ ] CJK/RTL: char-based shortness, "。" as period, 图/表/第X章 patterns.

@@ -123,7 +123,10 @@ docformat gui
 Opens a local web app at `http://127.0.0.1:8765` (stdlib server, localhost
 only — nothing ever leaves the machine): drag in the draft, optionally drag in
 your organization's brand template, click **Format document**, download the
-results, and see at a glance which blocks need a human look.
+results, and see at a glance which blocks need a human look. The app shows the
+active template profile, tells you honestly whether PDF export (LibreOffice)
+and AI assist (Ollama) are available on this machine, and numbers each flagged
+block so you can find it.
 
 ### Standalone executable
 

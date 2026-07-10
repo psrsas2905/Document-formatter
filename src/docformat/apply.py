@@ -176,13 +176,18 @@ def _emit_paragraph(out, block, style, footnotes: FootnoteWriter) -> int:
 
 
 def _set_highlight(run, value: str) -> None:
-    """Apply a highlighter colour (OOXML w:highlight) to a run."""
-    from docx.oxml import OxmlElement
+    """Apply a highlighter colour (OOXML w:highlight) to a run.
 
-    rpr = run._element.get_or_add_rPr()
-    hl = OxmlElement("w:highlight")
-    hl.set(qn("w:val"), value)
-    rpr.append(hl)
+    Uses python-docx's typed setter so w:highlight lands in its correct
+    schema position within rPr (a raw append would sit after w:u/w:strike,
+    which violates the CT_RPr element order). Unknown values are skipped
+    rather than emitted as invalid XML."""
+    from docx.enum.text import WD_COLOR_INDEX
+
+    try:
+        run.font.highlight_color = WD_COLOR_INDEX.from_xml(value)
+    except (KeyError, ValueError):
+        pass
 
 
 RT_HYPERLINK = (

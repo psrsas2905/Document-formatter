@@ -181,8 +181,12 @@ def _walk_body(container, src, blocks: list[Block], notes_ctx, stats: _Stats, nu
             para = Paragraph(el, src)
             pPr = el.find(qn("w:pPr"))
             has_pbb = pPr is not None and pPr.find(qn("w:pageBreakBefore")) is not None
+            # Page-break runs in THIS paragraph's flow — not ones nested in a
+            # text box (those are handled when the box is walked).
             has_break_run = any(
-                br.get(qn("w:type")) == "page" for br in el.iter(qn("w:br"))
+                br.get(qn("w:type")) == "page"
+                and not any(a.tag == W_TXBX for a in br.iterancestors())
+                for br in el.iter(qn("w:br"))
             )
             segments = _segments_for(el, para, src, notes_ctx, stats)
             text = "".join(s.text for s in segments if s.kind in ("text", "object"))

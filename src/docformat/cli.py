@@ -225,10 +225,10 @@ def inspect_template(
         ..., exists=True, help="The .docx/.dotx template to introspect."
     ),
 ) -> None:
-    """List a template's named styles and [placeholder] tokens.
+    """List a template's named styles and placeholder tokens.
 
     Use the style names shown here in a profile's style_map, and the
-    placeholders as --set / replace: keys.
+    placeholder tokens as --set / replace: keys.
     """
     from . import inspect as _inspect
 

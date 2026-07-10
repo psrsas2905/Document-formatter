@@ -1,0 +1,44 @@
+# Preset: English academic manuscript layout (APA 7th edition geometry).
+# Page geometry and scaffolding follow APA: Letter paper, 1-inch margins,
+# page number top-right. Typography (12pt Times/double spacing etc.) comes
+# from the template file — swap in your institution's template; the styles
+# below must exist inside it.
+
+name: "APA 7th (English academic)"
+
+template_file: "templates/org_standard.docx"
+
+style_map:
+  Heading1: "Heading 1"
+  Heading2: "Heading 2"
+  Heading3: "Heading 3"
+  Body:     "Body Text"
+  Caption:  "Caption"
+  ListItem: "List Bullet"
+  ListNumber: "List Number"
+  Quote:    "Quote"
+
+table_style: "Table Grid"
+
+page:
+  size: "Letter"
+  margins_mm:
+    top: 25.4
+    bottom: 25.4
+    left: 25.4
+    right: 25.4
+
+header:
+  text: "{page}"          # APA: page number in the header, right-aligned
+  show_on_first_page: true
+
+toc:
+  enabled: false           # APA manuscripts don't carry a TOC by default
+
+list_of_figures:
+  enabled: false
+
+output:
+  filename: "{basename}_v{version}_{date}"
+  version: "1.0"
+  export_pdf: true

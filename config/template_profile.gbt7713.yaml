@@ -1,0 +1,47 @@
+# Preset: Chinese academic report/thesis layout (GB/T 7713.1-2006 geometry).
+# A4 paper, 25.4mm top/bottom and 31.7mm side margins, TOC + figure list,
+# centered page numbers in the footer. Typography (SimSun/Times pairing etc.)
+# comes from the template file — swap in your institution's template; the
+# styles below must exist inside it.
+
+name: "GB/T 7713.1 (Chinese academic)"
+
+template_file: "templates/org_standard.docx"
+
+style_map:
+  Heading1: "Heading 1"
+  Heading2: "Heading 2"
+  Heading3: "Heading 3"
+  Body:     "Body Text"
+  Caption:  "Caption"
+  ListItem: "List Bullet"
+  ListNumber: "List Number"
+  Quote:    "Quote"
+
+table_style: "Table Grid"    # swap for a three-line (booktabs) style if the
+                             # template defines one
+
+page:
+  size: "A4"
+  margins_mm:
+    top: 25.4
+    bottom: 25.4
+    left: 31.7
+    right: 31.7
+
+footer:
+  text: "{page}"
+
+toc:
+  enabled: true
+  title: "目录"
+  max_level: 3
+
+list_of_figures:
+  enabled: true
+  title: "插图清单"
+
+output:
+  filename: "{basename}_v{version}_{date}"
+  version: "1.0"
+  export_pdf: true

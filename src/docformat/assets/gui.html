@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>docformat — Document Formatter</title>
+<style>
+  :root {
+    --brand: #1f4e79; --brand-dark: #163a5c; --accent: #c0502d;
+    --bg: #f4f6f9; --card: #ffffff; --ink: #22303c; --muted: #6b7a89;
+    --line: #e3e8ee; --ok: #1e7e46; --warn: #b3661a; --err: #b3261e;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.55 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  header {
+    background: linear-gradient(135deg, var(--brand) 0%, var(--brand-dark) 100%);
+    color: #fff; padding: 22px 0;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+  header .wrap { display: flex; align-items: center; gap: 14px; }
+  .logo {
+    width: 40px; height: 40px; border-radius: 9px; flex: none;
+    background: linear-gradient(135deg, var(--accent) 0 18%, #fff 18% 26%, var(--accent) 26%);
+    background: conic-gradient(from 220deg, var(--accent), #e8825f, var(--accent));
+    display: grid; place-items: center; font-weight: 800; font-size: 20px; color: #fff;
+  }
+  header h1 { font-size: 20px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+  header p { margin: 2px 0 0; font-size: 13px; opacity: .85; }
+  main { padding: 28px 0 60px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 22px 24px; margin-bottom: 18px; box-shadow: 0 1px 2px rgba(16,34,53,.05);
+  }
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 0 0 18px; }
+  .step {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 12px 14px; font-size: 13px; color: var(--muted); display: flex; gap: 10px; align-items: center;
+  }
+  .step b { color: var(--ink); display: block; font-size: 13.5px; }
+  .step .n {
+    width: 26px; height: 26px; border-radius: 50%; background: var(--brand); color: #fff;
+    display: grid; place-items: center; font-size: 13px; font-weight: 700; flex: none;
+  }
+  h2 { font-size: 15px; margin: 0 0 12px; color: var(--brand-dark); }
+  .drop {
+    border: 2px dashed #b9c6d3; border-radius: var(--radius); padding: 26px 18px;
+    text-align: center; color: var(--muted); cursor: pointer; transition: all .15s ease;
+    background: #fafcfe;
+  }
+  .drop:hover, .drop.hover { border-color: var(--brand); background: #eef4fa; }
+  .drop.filled { border-style: solid; border-color: var(--ok); background: #f2faf5; color: var(--ink); }
+  .drop strong { color: var(--brand-dark); }
+  .drop .fname { font-weight: 600; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 680px) { .grid2, .steps { grid-template-columns: 1fr; } }
+  .opt-label { font-size: 13px; color: var(--muted); margin: 14px 0 6px; display: block; }
+  .row { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 14px; }
+  label.check { display: flex; gap: 8px; align-items: center; font-size: 14px; cursor: pointer; }
+  input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--brand); }
+  button.primary {
+    margin-top: 20px; width: 100%; padding: 13px; border: 0; border-radius: 10px;
+    background: var(--brand); color: #fff; font-size: 15.5px; font-weight: 650; cursor: pointer;
+    transition: background .15s ease;
+  }
+  button.primary:hover:not(:disabled) { background: var(--brand-dark); }
+  button.primary:disabled { background: #9fb2c4; cursor: not-allowed; }
+  .hint { font-size: 12.5px; color: var(--muted); margin-top: 8px; text-align: center; }
+  .spinner {
+    display: inline-block; width: 16px; height: 16px; border: 2.5px solid rgba(255,255,255,.35);
+    border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite;
+    vertical-align: -3px; margin-right: 9px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #status { display: none; margin-top: 14px; font-size: 14px; padding: 12px 14px; border-radius: 10px; }
+  #status.busy { display: block; background: #eef4fa; color: var(--brand-dark); }
+  #status.error { display: block; background: #fdefee; color: var(--err); }
+  #results { display: none; }
+  .downloads { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 6px; }
+  @media (max-width: 680px) { .downloads { grid-template-columns: 1fr; } }
+  a.dl {
+    display: block; text-decoration: none; border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px; color: var(--ink); background: #fafcfe; transition: all .15s ease;
+  }
+  a.dl:hover { border-color: var(--brand); background: #eef4fa; }
+  a.dl b { display: block; color: var(--brand-dark); margin-bottom: 2px; }
+  a.dl span { font-size: 12.5px; color: var(--muted); }
+  .badge {
+    display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 12.5px; font-weight: 600;
+  }
+  .badge.ok { background: #e5f5ec; color: var(--ok); }
+  .badge.warn { background: #fdf3e7; color: var(--warn); }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: .4px; }
+  td.conf { font-variant-numeric: tabular-nums; }
+  .qa-note { font-size: 13px; color: var(--muted); margin-top: 10px; }
+  .fields-hint { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
+  .fields-hint code { background: #eef2f6; padding: 1px 5px; border-radius: 5px; font-size: 12px; }
+  .field-row { display: flex; gap: 10px; margin-bottom: 8px; }
+  .field-row input {
+    border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; font: inherit;
+    font-size: 14px; color: var(--ink); background: #fafcfe;
+  }
+  .field-row input:focus { outline: 2px solid var(--brand); outline-offset: -1px; }
+  .field-row .fkey { flex: 2; }
+  .field-row .fval { flex: 3; }
+  .field-row .rm {
+    border: 1px solid var(--line); background: #fafcfe; border-radius: 8px; width: 38px;
+    color: var(--muted); font-size: 17px; cursor: pointer;
+  }
+  .field-row .rm:hover { color: var(--err); border-color: var(--err); }
+  button.ghost {
+    border: 1px dashed #b9c6d3; background: none; color: var(--brand-dark); border-radius: 8px;
+    padding: 7px 14px; font: inherit; font-size: 13.5px; cursor: pointer;
+  }
+  button.ghost:hover { border-color: var(--brand); background: #eef4fa; }
+  .warnings { margin: 0 0 14px; padding: 12px 14px 12px 30px; background: #fdf3e7;
+              border-radius: 10px; font-size: 13.5px; color: var(--warn); }
+  .warnings li { margin: 3px 0; }
+  footer { text-align: center; color: var(--muted); font-size: 12.5px; padding: 10px 0 30px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="logo">D</div>
+    <div>
+      <h1>docformat</h1>
+      <p>Raw Word draft → publish-ready document, in your organization's template. 100% offline.</p>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="steps">
+    <div class="step"><span class="n">1</span><span><b>Upload your draft</b>the messy .docx</span></div>
+    <div class="step"><span class="n">2</span><span><b>Add your brand template</b>logo &amp; styles (optional)</span></div>
+    <div class="step"><span class="n">3</span><span><b>Format &amp; review</b>download output + QA report</span></div>
+  </div>
+
+  <form id="form" class="card">
+    <div class="grid2">
+      <div>
+        <h2>Draft document</h2>
+        <div class="drop" id="drop-src">
+          <input type="file" id="file-src" accept=".docx,.doc,.odt,.rtf,.txt,.md" hidden>
+          <div class="msg">Drop your raw draft here (<strong>.docx</strong>, .doc, .odt, .rtf, .txt, .md)<br>or click to browse</div>
+        </div>
+      </div>
+      <div>
+        <h2>Brand template <span style="font-weight:400;color:var(--muted)">(optional)</span></h2>
+        <div class="drop" id="drop-tpl">
+          <input type="file" id="file-tpl" accept=".docx,.dotx" hidden>
+          <div class="msg">Drop your organization's <strong>.docx / .dotx</strong> template<br>logo &amp; house styles are preserved</div>
+        </div>
+      </div>
+    </div>
+
+    <h2 style="margin-top:20px">Document fields <span style="font-weight:400;color:var(--muted)">(optional)</span></h2>
+    <p class="fields-hint">Fill your template's placeholders for this document — e.g. field
+    <em>Client Name</em> fills <code>[Client Name]</code> on the cover page. Unfilled
+    placeholders are listed in the QA report.</p>
+    <div id="fields"></div>
+    <button type="button" class="ghost" id="add-field">+ Add field</button>
+
+    <div class="row">
+      <label class="check"><input type="checkbox" id="opt-pdf" checked> Export tagged PDF</label>
+      <label class="check"><input type="checkbox" id="opt-ai"> Use local AI assist (Ollama)</label>
+    </div>
+
+    <button class="primary" id="go" type="submit" disabled>Format document</button>
+    <div class="hint">Everything runs on this computer. No file ever leaves your machine.</div>
+    <div id="status"></div>
+  </form>
+
+  <div class="card" id="results">
+    <h2 style="display:flex;justify-content:space-between;align-items:center">
+      Results <span id="qa-badge" class="badge ok"></span>
+    </h2>
+    <ul class="warnings" id="warnings" style="display:none"></ul>
+    <div class="downloads" id="downloads"></div>
+    <div id="qa-section">
+      <h2 style="margin-top:18px">Needs your review</h2>
+      <div id="qa-table"></div>
+      <p class="qa-note">These blocks were classified with low confidence. Open the formatted
+      document, check their style, and fix in Word if needed. Full details are in the QA report.</p>
+    </div>
+  </div>
+</main>
+
+<footer>docformat v__VERSION__ · deterministic, template-driven formatting · offline by design</footer>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const drops = [
+    { drop: $("drop-src"), input: $("file-src"), required: true },
+    { drop: $("drop-tpl"), input: $("file-tpl"), required: false },
+  ];
+
+  function refreshGo() {
+    $("go").disabled = !drops[0].input.files.length;
+  }
+
+  drops.forEach(({ drop, input }) => {
+    const msg = drop.querySelector(".msg");
+    const original = msg.innerHTML;
+    drop.addEventListener("click", () => input.click());
+    input.addEventListener("change", () => show(input.files[0]));
+    ["dragover", "dragenter"].forEach((ev) =>
+      drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("hover"); }));
+    ["dragleave", "drop"].forEach((ev) =>
+      drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("hover"); }));
+    drop.addEventListener("drop", (e) => {
+      if (e.dataTransfer.files.length) { input.files = e.dataTransfer.files; show(input.files[0]); }
+    });
+    function show(file) {
+      if (file) { drop.classList.add("filled"); msg.innerHTML = "✓ <span class='fname'></span>";
+                  msg.querySelector(".fname").textContent = file.name; }
+      else { drop.classList.remove("filled"); msg.innerHTML = original; }
+      refreshGo();
+    }
+  });
+
+  function addFieldRow(key, val) {
+    const row = document.createElement("div");
+    row.className = "field-row";
+    row.innerHTML = '<input class="fkey" placeholder="Field name — e.g. Client Name">' +
+                    '<input class="fval" placeholder="Value for this document">' +
+                    '<button type="button" class="rm" title="Remove">×</button>';
+    if (key) row.querySelector(".fkey").value = key;
+    if (val) row.querySelector(".fval").value = val;
+    row.querySelector(".rm").addEventListener("click", () => row.remove());
+    $("fields").appendChild(row);
+  }
+  $("add-field").addEventListener("click", () => addFieldRow());
+  addFieldRow();  // start with one empty row
+
+  function collectFields() {
+    const out = {};
+    for (const row of $("fields").querySelectorAll(".field-row")) {
+      const k = row.querySelector(".fkey").value.trim();
+      const v = row.querySelector(".fval").value;
+      if (k) out[k] = v;
+    }
+    return out;
+  }
+
+  $("form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const status = $("status"), go = $("go");
+    const fd = new FormData();
+    fd.append("source", $("file-src").files[0]);
+    if ($("file-tpl").files.length) fd.append("template_docx", $("file-tpl").files[0]);
+    fd.append("pdf", $("opt-pdf").checked ? "1" : "0");
+    fd.append("ai", $("opt-ai").checked ? "1" : "0");
+    const fieldValues = collectFields();
+    if (Object.keys(fieldValues).length) fd.append("fields", JSON.stringify(fieldValues));
+
+    go.disabled = true;
+    go.innerHTML = "<span class='spinner'></span>Formatting…";
+    status.className = "busy"; status.textContent =
+      $("opt-pdf").checked ? "Applying template styles and exporting PDF (LibreOffice)…"
+                           : "Applying template styles…";
+    $("results").style.display = "none";
+
+    try {
+      const resp = await fetch("/format", { method: "POST", body: fd });
+      const data = await resp.json();
+      if (!resp.ok || data.error) throw new Error(data.error || ("Server error " + resp.status));
+      render(data);
+      status.style.display = "none"; status.className = "";
+    } catch (err) {
+      status.className = "error"; status.textContent = "Failed: " + err.message;
+    } finally {
+      go.disabled = false; go.textContent = "Format document"; refreshGo();
+    }
+  });
+
+  function render(data) {
+    const dl = $("downloads");
+    dl.innerHTML = "";
+    const items = [
+      ["Formatted document", ".docx in your template's styles", data.docx],
+      ["Tagged PDF", "TOC & fields refreshed, accessible", data.pdf],
+      ["QA report", "everything to double-check", data.qa],
+    ];
+    for (const [title, sub, url] of items) {
+      if (!url) continue;
+      const a = document.createElement("a");
+      a.className = "dl"; a.href = url;
+      a.innerHTML = "<b></b><span></span>";
+      a.querySelector("b").textContent = "⬇ " + title;
+      a.querySelector("span").textContent = sub;
+      dl.appendChild(a);
+    }
+
+    const warn = $("warnings");
+    const notes = data.notes || [];
+    warn.style.display = notes.length ? "block" : "none";
+    warn.innerHTML = "";
+    for (const note of notes) {
+      const li = document.createElement("li");
+      li.textContent = note;
+      warn.appendChild(li);
+    }
+
+    const badge = $("qa-badge");
+    const n = data.review.length;
+    badge.className = "badge " + (n ? "warn" : "ok");
+    badge.textContent = n
+      ? n + (n > 1 ? " blocks need review" : " block needs review")
+      : "All " + data.total_blocks + " blocks classified confidently";
+
+    const qs = $("qa-section");
+    if (!n) { qs.style.display = "none"; }
+    else {
+      qs.style.display = "";
+      const rows = data.review.map((r) =>
+        "<tr><td>" + esc(r.label) + "</td><td class='conf'>" + r.confidence.toFixed(2) +
+        "</td><td>" + esc(r.text) + "</td></tr>").join("");
+      $("qa-table").innerHTML =
+        "<table><thead><tr><th>Assigned style</th><th>Confidence</th><th>Text</th></tr></thead><tbody>"
+        + rows + "</tbody></table>";
+    }
+    $("results").style.display = "block";
+    $("results").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+})();
+</script>
+</body>
+</html>

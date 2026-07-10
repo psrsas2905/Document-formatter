@@ -16,15 +16,23 @@ from .models import BlockType, Document
 _HEADING_RANK = {BlockType.HEADING1: 1, BlockType.HEADING2: 2, BlockType.HEADING3: 3}
 
 
+def needs_review(block) -> bool:
+    """True if a block should be surfaced for human review."""
+    return block.label is BlockType.UNKNOWN or block.confidence < CONFIDENCE_THRESHOLD
+
+
+def review_counts(doc: Document) -> tuple[int, int]:
+    """(total blocks, blocks needing review) — shared by the report and batch."""
+    return len(doc.blocks), sum(needs_review(b) for b in doc.blocks)
+
+
 def write_report(doc: Document, out_path: str | Path) -> Path:
     """Write qa_report.md summarizing everything a human should double-check."""
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     uncertain = [
-        (i, b)
-        for i, b in enumerate(doc.blocks, 1)
-        if b.label is BlockType.UNKNOWN or b.confidence < CONFIDENCE_THRESHOLD
+        (i, b) for i, b in enumerate(doc.blocks, 1) if needs_review(b)
     ]
     jumps = _hierarchy_jumps(doc)
     alt_issues = _missing_alt_text(doc)

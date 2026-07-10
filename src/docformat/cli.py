@@ -154,6 +154,71 @@ def _run_format(input, template, template_docx, out, set_field, ai, pdf, overrid
     typer.echo(f"Done. Output in: {out}")
 
 
+@app.command()
+def batch(
+    inputs: list[Path] = typer.Argument(
+        ..., exists=True, help="Files and/or directories of drafts to format."
+    ),
+    template: Path = typer.Option(..., "--template", "-t", help="Path to template_profile.yaml."),
+    template_docx: Path | None = typer.Option(
+        None, "--template-docx", exists=True,
+        help="Brand template overriding the profile's template_file.",
+    ),
+    out: Path = typer.Option(Path("out"), "--out", "-o", help="Output directory."),
+    ai: bool = typer.Option(False, "--ai", help="Use optional local-AI classifier (offline)."),
+    pdf: bool = typer.Option(True, "--pdf/--no-pdf", help="Also export each PDF."),
+    overrides_dir: Path | None = typer.Option(
+        None, "--overrides-dir", exists=True, file_okay=False,
+        help="Folder of <stem>_overrides.yaml plans to re-apply per document.",
+    ),
+) -> None:
+    """Format many drafts at once with a consolidated QA summary."""
+    from . import batch as _batch
+
+    log_file = setup_logging()
+    try:
+        profile = load_profile(template)
+        if template_docx is not None:
+            profile.template_file = str(template_docx)
+        sources = _batch.collect_inputs(inputs)
+        if not sources:
+            typer.secho("No supported documents found in the given paths.", fg=typer.colors.YELLOW)
+            raise typer.Exit(code=1)
+        typer.echo(f"Formatting {len(sources)} document(s) with profile {profile.name!r}...")
+
+        def _progress(r: _batch.DocResult) -> None:
+            if r.ok:
+                typer.secho(
+                    f"  ✓ {Path(r.source).name} — {r.needs_review} block(s) need review",
+                    fg=typer.colors.GREEN,
+                )
+            else:
+                typer.secho(f"  ✗ {Path(r.source).name} — {r.error}", fg=typer.colors.RED)
+
+        results = _batch.run_batch(
+            sources, profile, out, ai=ai, pdf=pdf,
+            overrides_dir=overrides_dir, on_result=_progress,
+        )
+    except known_errors() as exc:
+        log.exception("batch failed")
+        typer.secho(f"Error: {_friendly(exc)}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+    except typer.Exit:
+        raise
+    except Exception as exc:
+        log.exception("batch crashed")
+        typer.secho(
+            f"Unexpected error: {exc}\nDetails were written to {log_file}",
+            fg=typer.colors.RED, err=True,
+        )
+        raise typer.Exit(code=1) from exc
+
+    failed = [r for r in results if not r.ok]
+    typer.echo(f"Done. Summary: {out / 'batch_summary.md'}")
+    if failed:
+        raise typer.Exit(code=1)
+
+
 @app.command("inspect-template")
 def inspect_template(
     template_docx: Path = typer.Argument(

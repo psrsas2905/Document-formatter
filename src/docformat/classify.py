@@ -29,8 +29,11 @@ DEFAULT_BODY_PT = 11.0
 HEADING_MAX_WORDS = 12
 
 CAPTION_RE = re.compile(r"^(figure|table)\s+\d+", re.IGNORECASE)
-# "1 Title" / "2.1 Title" / "1.0 TITLE" — section numbering at line start.
-NUMBERED_HEADING_RE = re.compile(r"^(\d{1,2}(?:\.\d{1,2}){0,3})\.?\s+\S")
+# "1 Title" / "1. Title" / "2.1 Title" / "1.0 TITLE" — section numbering at
+# line start; group 2 records whether the number carries list-ish punctuation.
+NUMBERED_RE = re.compile(r"^(\d{1,2}(?:\.\d{1,2}){0,3})([.)]?)\s+\S")
+# Single-level "1." / "1)" item — used for run-of-items sequence detection.
+SINGLE_NUM_ITEM_RE = re.compile(r"^\d{1,3}[.)]\s+")
 
 # Built-in style names we recognize as already-valid labels (spec: trust them).
 STYLE_TO_LABEL: dict[str, BlockType] = {
@@ -54,6 +57,7 @@ def classify(doc: Document) -> Document:
     body_pt = _body_size(doc.blocks)
     size_rank = _heading_size_rank(doc.blocks, body_pt)
 
+    is_num_item = [bool(SINGLE_NUM_ITEM_RE.match(b.text)) for b in doc.blocks]
     for i, block in enumerate(doc.blocks):
         neighbors_long = (
             i > 0
@@ -61,8 +65,14 @@ def classify(doc: Document) -> Document:
             and len(doc.blocks[i - 1].text) > 100
             and len(doc.blocks[i + 1].text) > 100
         )
+        # "1." near other "N." lines is a run of list items, not a heading.
+        in_sequence = any(
+            is_num_item[j]
+            for j in range(max(0, i - 2), min(len(doc.blocks), i + 3))
+            if j != i
+        )
         block.label, block.confidence = _classify_block(
-            block, body_pt, size_rank, neighbors_long
+            block, body_pt, size_rank, neighbors_long, in_sequence
         )
 
     if doc.title is None:
@@ -77,6 +87,7 @@ def _classify_block(
     body_pt: float,
     size_rank: dict[float, BlockType],
     neighbors_long: bool = False,
+    in_sequence: bool = False,
 ) -> tuple[BlockType, float]:
     h = block.hints
     text = block.text
@@ -93,29 +104,50 @@ def _classify_block(
     if CAPTION_RE.match(text):
         return BlockType.CAPTION, 0.95
 
-    # 3. Typed bullet/number marker -> list item (level already in hints).
-    if h.is_list_marker:
-        return BlockType.LIST_ITEM, 0.9
+    # 3. Word-native list numbering (w:numPr) is definitive — the ribbon list
+    #    button was used; the visible number/bullet lives in numbering.xml.
+    if h.has_numbering:
+        return BlockType.LIST_ITEM, 0.95
 
     size = h.font_size_pt if h.font_size_pt is not None else DEFAULT_BODY_PT
     is_short = len(text.split()) <= HEADING_MAX_WORDS and not text.rstrip().endswith(".")
 
-    # 3b. Section-numbered line ("1 Title", "2.1 Title", "1.0 TITLE") -> heading
-    #     whose level comes straight from the numbering depth.
-    m = NUMBERED_HEADING_RE.match(text)
-    if m and is_short:
+    # 4. Number-led lines: decide heading vs list item BEFORE the generic list
+    #    rule, or "1. Introduction" headings become bullets with the number
+    #    deleted.
+    m = NUMBERED_RE.match(text)
+    if m:
         parts = m.group(1).split(".")
         if len(parts) > 1 and parts[-1] == "0":
             parts = parts[:-1]  # "1.0 PURPOSE" convention counts as level 1
-        level = min(len(parts), len(_HEADING_LEVELS))
-        return _HEADING_LEVELS[level - 1], 0.9 if h.bold else 0.85
+        multi_level = len(parts) > 1
+        punctuated = bool(m.group(2))
 
-    # 4. Larger than body -> heading; level from the document-wide size ranking.
+        if multi_level and is_short:
+            level = min(len(parts), len(_HEADING_LEVELS))
+            return _HEADING_LEVELS[level - 1], 0.9 if h.bold else 0.85
+        if not multi_level and punctuated:
+            # "1. xxx": sentence-like or part of a numbered run -> list item;
+            # a lone short one is genuinely ambiguous -> low confidence (QA).
+            if not is_short or in_sequence:
+                return BlockType.LIST_ITEM, 0.9
+            if h.bold:
+                return BlockType.HEADING1, 0.85
+            return BlockType.LIST_ITEM, 0.55
+        if not multi_level and not punctuated and is_short and h.bold:
+            return BlockType.HEADING1, 0.9
+        # bare "5 people attended..." carries no heading signal: fall through.
+
+    # 5. Typed bullet/letter/roman marker -> list item (level already in hints).
+    if h.is_list_marker:
+        return BlockType.LIST_ITEM, 0.9
+
+    # 6. Larger than body -> heading; level from the document-wide size ranking.
     if size in size_rank:
         confidence = 0.9 if (h.bold or is_short) else 0.7
         return size_rank[size], confidence
 
-    # 5. Short + bold + no trailing period at body size -> heading, but the level
+    # 7. Short + bold + no trailing period at body size -> heading, but the level
     #    is a guess (one deeper than the deepest size-derived heading), so keep
     #    confidence under the threshold to route it to the QA report.
     if h.bold and is_short:
@@ -125,11 +157,11 @@ def _classify_block(
         level = min(deepest + 1, len(_HEADING_LEVELS) - 1)
         return _HEADING_LEVELS[level], 0.55
 
-    # 6. Indented italic -> quote.
+    # 8. Indented italic -> quote.
     if h.italic and h.list_level > 0:
         return BlockType.QUOTE, 0.7
 
-    # 6b. Short plain line sandwiched between long paragraphs -> likely a
+    # 9. Short plain line sandwiched between long paragraphs -> likely a
     #     heading whose formatting was lost; level unknowable, so it stays
     #     under the threshold and reaches the QA report.
     if (
@@ -141,7 +173,7 @@ def _classify_block(
     ):
         return BlockType.HEADING2, 0.55
 
-    # 7. Everything else -> body.
+    # 10. Everything else -> body.
     return BlockType.BODY, 0.8
 
 

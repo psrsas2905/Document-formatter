@@ -121,6 +121,9 @@ def _emit_paragraph(out, block, style, footnotes: FootnoteWriter) -> int:
                     lead_pending = False
             if not text:
                 continue
+            if seg.link:
+                _append_hyperlink(out, para, text, seg.link)
+                continue
             run = para.add_run(text)
             if keep_emphasis:
                 if seg.bold and not uniform_bold:
@@ -150,6 +153,32 @@ def _emit_paragraph(out, block, style, footnotes: FootnoteWriter) -> int:
     return objects
 
 
+RT_HYPERLINK = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"
+)
+
+
+def _append_hyperlink(out, para, text: str, url: str) -> None:
+    """Re-create an external hyperlink (new relationship in the output package)."""
+    from docx.oxml import OxmlElement
+
+    rid = out.part.relate_to(url, RT_HYPERLINK, is_external=True)
+    h = OxmlElement("w:hyperlink")
+    h.set(qn("r:id"), rid)
+    run = OxmlElement("w:r")
+    rpr = OxmlElement("w:rPr")
+    rstyle = OxmlElement("w:rStyle")
+    rstyle.set(qn("w:val"), "Hyperlink")  # honored when the template defines it
+    rpr.append(rstyle)
+    run.append(rpr)
+    t = OxmlElement("w:t")
+    t.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+    t.text = text
+    run.append(t)
+    h.append(run)
+    para._p.append(h)
+
+
 def _append_footnote_ref(para, fn_id: int) -> None:
     from docx.oxml import OxmlElement
 
@@ -169,7 +198,13 @@ def _append_footnote_ref(para, fn_id: int) -> None:
 
 
 def _emit_table(out, block, profile: TemplateProfile, doc: Document) -> None:
-    """Import the source table content-intact; restyle via the template."""
+    """Import the source table content-intact; restyle via the template.
+
+    Relationship ids inside the carried XML are only meaningful in the SOURCE
+    package — every one must be rewritten (images, hyperlinks) or stripped
+    (anything else), or they rebind to arbitrary parts of the template and can
+    corrupt the output.
+    """
     tbl = parse_xml(block.xml)
 
     for blip in tbl.iter(A_BLIP):
@@ -178,6 +213,20 @@ def _emit_table(out, block, profile: TemplateProfile, doc: Document) -> None:
             blob, _ext = block.resources[rid]
             new_rid, _ = out.part.get_or_add_image(BytesIO(blob))
             blip.set(R_EMBED, new_rid)
+
+    for h_el in list(tbl.iter(qn("w:hyperlink"))):
+        rid = h_el.get(qn("r:id"))
+        if rid and rid in block.links:
+            new_rid = out.part.relate_to(block.links[rid], RT_HYPERLINK, is_external=True)
+            h_el.set(qn("r:id"), new_rid)
+        else:  # internal/unresolvable link: keep the text, drop the link
+            parent = h_el.getparent()
+            idx = list(parent).index(h_el)
+            for child in reversed(list(h_el)):
+                parent.insert(idx, child)
+            parent.remove(h_el)
+
+    _strip_foreign_rels(tbl, out, doc)
 
     style_name = profile.raw.get("table_style")
     if style_name:
@@ -197,6 +246,41 @@ def _emit_table(out, block, profile: TemplateProfile, doc: Document) -> None:
         sect.addprevious(tbl)
     else:
         body.append(tbl)
+
+
+_R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+
+
+def _strip_foreign_rels(tbl, out, doc: Document) -> None:
+    """Remove any element still referencing a relationship id that does not
+    exist in the OUTPUT package (charts, OLE, note refs inside cells...) —
+    rewritten images/hyperlinks now hold valid output rids, so anything left
+    is a dangling source-package reference that could rebind arbitrarily.
+    Each removal is QA-noted."""
+    valid = set(out.part.rels)
+    dropped = 0
+    for el in list(tbl.iter()):
+        foreign = any(
+            attr.startswith(f"{{{_R_NS}}}") and value not in valid
+            for attr, value in el.attrib.items()
+        )
+        if not foreign:
+            continue
+        victim = el
+        for ancestor in el.iterancestors():
+            if ancestor.tag in (qn("w:drawing"), qn("w:object"), qn("w:pict")):
+                victim = ancestor
+                break
+        parent = victim.getparent()
+        if parent is not None:
+            parent.remove(victim)
+            dropped += 1
+    if dropped:
+        doc.notes.append(
+            f"{dropped} embedded element(s) inside a carried table (chart, OLE "
+            "object, or cross-reference) could not be transferred and were "
+            "removed — re-insert them manually."
+        )
 
 
 def _table_style(out, name: str):

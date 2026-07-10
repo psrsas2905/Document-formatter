@@ -1,13 +1,13 @@
 # Project Status & Handoff
 
-> Last updated: 2026-07-09. Read `PROJECT_SPEC.md` first (the build contract),
+> Last updated: 2026-07-10. Read `PROJECT_SPEC.md` first (the build contract),
 > then this file (what actually exists and why), then `docs/architecture.md`.
 
 ## Where things stand
 
 **The tool is feature-complete against the spec's v1 acceptance criteria, plus
 several rounds of extensions.** All work lives on branch
-`claude/docformat-offline-tool-3xb0yq` (pushed). 34 tests pass
+`claude/docformat-offline-tool-3xb0yq` (pushed). 43 tests pass
 (`python -m pytest -q`). Lint is clean (`ruff check src tests scripts`).
 
 Working end-to-end today:
@@ -82,6 +82,19 @@ bash scripts/build_exe.sh   # -> dist/docformat (rebuild after changes)
   user); profile `config/template_profile.redlotus.yaml`; regression tests in
   `tests/test_redlotus.py`
 - `tests/golden/input_messy_styles.tsv` — golden style/text sequence
+
+## Expert review (2026-07-10)
+
+A four-perspective review ran (correctness, security, deployment, product).
+**Tier 1 (silent content loss) is FIXED**: tracked changes auto-accepted with a
+QA note, fields frozen to cached text, content controls unwrapped, native
+w:numPr lists detected, hyperlinks carried (external) or QA-counted (internal),
+endnotes carried as footnotes, comments listed in QA, table relationship ids
+rewritten or stripped (never leaked), numbered-heading vs list discrimination
+(sequence-aware), bare numbers no longer become H1s, letter markers now
+case-sensitive. Regression suite: `tests/test_fidelity.py`.
+Remaining Tier 2 (deployment) and Tier 3 (versatility) items:
+`docs/REVIEW_BACKLOG.md` — Tier 2 must land before team rollout.
 
 ## Known gaps / natural next steps
 

@@ -47,6 +47,9 @@ class Segment:
     width_emu: int | None = None
     height_emu: int | None = None
     alt: str = ""
+    # For text segments inside an external hyperlink: the target URL,
+    # re-related in the output so links keep working.
+    link: str | None = None
 
 
 @dataclass
@@ -59,6 +62,8 @@ class FormatHints:
     all_caps: bool = False
     existing_style: str | None = None
     is_list_marker: bool = False
+    # True when the paragraph carries Word-native list numbering (w:numPr).
+    has_numbering: bool = False
     list_level: int = 0
 
 
@@ -72,10 +77,11 @@ class Block:
     confidence: float = 0.0  # 0..1; low values are flagged for human review
     # Inline content in source order; empty means plain text-only paragraph.
     segments: list[Segment] = field(default_factory=list)
-    # For TABLE blocks: the original w:tbl XML, plus image blobs keyed by the
-    # relationship id referenced inside that XML.
+    # For TABLE blocks: the original w:tbl XML, plus image blobs and external
+    # hyperlink targets keyed by the relationship ids referenced in that XML.
     xml: str | None = None
     resources: dict[str, tuple[bytes, str]] = field(default_factory=dict)
+    links: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass

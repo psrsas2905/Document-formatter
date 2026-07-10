@@ -116,5 +116,5 @@ def _missing_alt_text(doc: Document) -> list[str]:
 
 
 def _snip(text: str, limit: int = 70) -> str:
-    text = text.replace("|", "\\|")
+    text = text.replace("\n", " ").replace("|", "\\|")
     return text if len(text) <= limit else text[: limit - 1] + "…"

@@ -36,6 +36,7 @@ class FootnoteWriter:
         self._root = None
         self._part = None
         self._next_id = 1
+        self._added = 0
 
     def add(self, text: str) -> int:
         """Register a footnote body; returns the id to reference in the run."""
@@ -43,6 +44,7 @@ class FootnoteWriter:
             self._load_or_create()
         fn_id = self._next_id
         self._next_id += 1
+        self._added += 1
         fn = etree.SubElement(self._root, f"{{{W}}}footnote")
         fn.set(f"{{{W}}}id", str(fn_id))
         p = etree.SubElement(fn, f"{{{W}}}p")
@@ -64,7 +66,7 @@ class FootnoteWriter:
         self._part._blob = etree.tostring(
             self._root, xml_declaration=True, encoding="UTF-8", standalone=True
         )
-        return self._next_id - 1
+        return self._added
 
     def _load_or_create(self) -> None:
         doc_part = self._doc.part

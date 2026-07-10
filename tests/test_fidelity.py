@@ -197,6 +197,37 @@ def test_section_break_and_landscape_flagged(tmp_path, profile):
     assert note is not None and "landscape" in note.lower()
 
 
+def test_text_box_content_carried(tmp_path, profile):
+    """Text inside a text box is inlined into the flow (was silently dropped),
+    in reading order, and QA-noted."""
+    wps = "http://schemas.microsoft.com/office/word/2010/wordprocessingShape"
+    src = docx.Document()
+    src.add_paragraph("Body before the callout.")
+    run = src.add_paragraph().add_run()
+    run._element.append(parse_xml(
+        f'<w:drawing {W} '
+        'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" '
+        'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
+        f'xmlns:wps="{wps}"><wp:inline><a:graphic>'
+        f'<a:graphicData uri="{wps}"><wps:wsp><wps:txbx><w:txbxContent>'
+        "<w:p><w:r><w:t>Note inside the text box.</w:t></w:r></w:p>"
+        "</w:txbxContent></wps:txbx></wps:wsp></a:graphicData></a:graphic></wp:inline></w:drawing>"
+    ))
+    src.add_paragraph("Body after the callout.")
+    src_path = tmp_path / "src.docx"
+    src.save(src_path)
+
+    doc, out, _ = _pipeline(src_path, profile, tmp_path)
+    texts = [b.text for b in doc.blocks]
+    assert texts == [
+        "Body before the callout.",
+        "Note inside the text box.",
+        "Body after the callout.",
+    ]
+    assert any("text box" in n and "inlined" in n for n in doc.notes)
+    assert any("Note inside the text box." == p.text for p in out.paragraphs)
+
+
 def test_hyperlink_url_carried(tmp_path, profile):
     src = docx.Document()
     p = src.add_paragraph("See the ")

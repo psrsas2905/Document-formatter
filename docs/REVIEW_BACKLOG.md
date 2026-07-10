@@ -65,6 +65,7 @@ remains, in priority order.
       `ingest` page-break detection + `_section_notes`. (Text-box content carry
       and VML image conversion are still open.)
 - [x] Highlight (font.highlight_color) carry — `Segment.highlight`.
+- [x] Text-box content carry — inlined in reading order (`ingest._outer_textboxes`).
 - [ ] CJK/RTL: char-based shortness, "。" as period, 图/表/第X章 patterns.
 - [ ] Injected Word comments on flagged blocks (anchors done; comments still open).
-- [ ] Text-box content carry (currently QA-flagged only); VML image conversion.
+- [ ] VML (legacy) image conversion (still QA-flagged only).

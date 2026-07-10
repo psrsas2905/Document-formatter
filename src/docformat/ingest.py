@@ -89,8 +89,9 @@ class _Stats:
             out.append(f"{self.endnotes} endnote(s) were carried over as footnotes.")
         if self.textboxes:
             out.append(
-                f"{self.textboxes} text box(es) containing text were dropped — "
-                "copy their content across manually."
+                f"{self.textboxes} text box(es) were inlined into the document flow "
+                "in reading order — check their placement (floating position is not "
+                "preserved)."
             )
         if self.vml_images:
             out.append(
@@ -157,6 +158,15 @@ def _section_notes(body) -> list[str]:
     return notes
 
 
+def _outer_textboxes(el) -> list:
+    """Text boxes anchored in this element, excluding boxes nested inside another
+    (those are reached when their own host paragraph is walked)."""
+    return [
+        tx for tx in el.iter(W_TXBX)
+        if not any(anc.tag == W_TXBX for anc in tx.iterancestors())
+    ]
+
+
 def _walk_body(container, src, blocks: list[Block], notes_ctx, stats: _Stats, numbering) -> None:
     """Collect blocks from a body-level container, descending into content
     controls (w:sdt) so their wrapped paragraphs/tables are not lost."""
@@ -181,16 +191,23 @@ def _walk_body(container, src, blocks: list[Block], notes_ctx, stats: _Stats, nu
             break_before = pending_break or has_pbb
             # An inline break pushes the new page onto whatever follows.
             pending_break = has_break_run
-            if not text and not any(s.kind != "text" for s in segments):
+            if text or any(s.kind != "text" for s in segments):
+                blocks.append(Block(
+                    text=text,
+                    hints=_hints_for(para, text, leading_tabs, numbering),
+                    segments=segments,
+                    page_break_before=break_before,
+                ))
+            else:
                 pending_break = pending_break or break_before  # keep it for the next block
-                continue
-            block = Block(
-                text=text,
-                hints=_hints_for(para, text, leading_tabs, numbering),
-                segments=segments,
-                page_break_before=break_before,
-            )
-            blocks.append(block)
+            # Text-box content is anchored in this paragraph but not part of its
+            # run text — inline it into the flow so it isn't silently lost. Done
+            # even for an otherwise-empty host paragraph.
+            for box in _outer_textboxes(el):
+                before = len(blocks)
+                _walk_body(box, src, blocks, notes_ctx, stats, numbering)
+                if len(blocks) > before:
+                    stats.textboxes += 1
         elif el.tag == qn("w:tbl"):
             block = _table_block(Table(el, src), src)
             block.page_break_before = pending_break
@@ -286,10 +303,8 @@ def _run_segments(r_el, para, src, notes_ctx, stats: _Stats, link) -> list[Segme
         segments.append(Segment(kind="object", text=run.text))
         return segments
 
-    # Text boxes and legacy VML images can't be carried — count for QA.
-    for txbx in r_el.iter(W_TXBX):
-        if "".join(t.text or "" for t in txbx.iter(qn("w:t"))).strip():
-            stats.textboxes += 1
+    # Text-box content is carried separately (see _walk_body); legacy VML images
+    # still can't be carried — count for QA.
     if next(iter(r_el.iter(V_IMAGEDATA)), None) is not None:
         stats.vml_images += 1
 

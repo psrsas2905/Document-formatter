@@ -19,6 +19,8 @@
   mid-document **section breaks** and **landscape** pages are QA-flagged rather
   than reconstructed (the template owns page setup).
 - **Highlighter marks** are preserved as inline author annotations.
+- **Text-box content** is now inlined into the document flow in reading order
+  (previously dropped and only QA-flagged), with a note to check placement.
 
 ## Unreleased — Tier 3 (versatility)
 

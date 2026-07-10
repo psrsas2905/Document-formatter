@@ -130,6 +130,88 @@ def _run_format(input, template, template_docx, out, set_field, ai, pdf) -> None
     typer.echo(f"Done. Output in: {out}")
 
 
+@app.command("inspect-template")
+def inspect_template(
+    template_docx: Path = typer.Argument(
+        ..., exists=True, help="The .docx/.dotx template to introspect."
+    ),
+) -> None:
+    """List a template's named styles and [placeholder] tokens.
+
+    Use the style names shown here in a profile's style_map, and the
+    placeholders as --set / replace: keys.
+    """
+    from . import inspect as _inspect
+
+    setup_logging()
+    try:
+        report = _inspect.inspect_template(template_docx)
+    except known_errors() as exc:
+        typer.secho(f"Error: {_friendly(exc)}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"Template: {report.path}\n")
+    for kind in ("paragraph", "table", "character", "list"):
+        group = report.styles_of(kind)
+        if not group:
+            continue
+        typer.secho(f"{kind.capitalize()} styles ({len(group)}):", bold=True)
+        for s in group:
+            tags = []
+            if s.used:
+                tags.append("used")
+            if not s.builtin:
+                tags.append("custom")
+            suffix = f"  [{', '.join(tags)}]" if tags else ""
+            typer.echo(f"  {s.name}{suffix}")
+        typer.echo("")
+
+    typer.secho("Placeholders:", bold=True)
+    if report.placeholders:
+        for token, count in report.placeholders.items():
+            typer.echo(f"  {token} ×{count}")
+    else:
+        typer.echo("  (none found)")
+
+
+@app.command("validate-profile")
+def validate_profile(
+    template: Path = typer.Argument(
+        ..., exists=True, help="Path to template_profile.yaml."
+    ),
+    template_docx: Path | None = typer.Option(
+        None,
+        "--template-docx",
+        exists=True,
+        help="Validate against this template instead of the profile's template_file.",
+    ),
+) -> None:
+    """Check that every style a profile maps to exists in its template."""
+    from . import inspect as _inspect
+
+    setup_logging()
+    try:
+        profile = load_profile(template)
+    except (ValueError, FileNotFoundError) as exc:
+        typer.secho(f"Error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+    if template_docx is not None:
+        profile.template_file = str(template_docx)
+
+    issues = _inspect.validate_profile(profile)
+    errors = [i for i in issues if i.severity == "error"]
+    for issue in issues:
+        color = typer.colors.RED if issue.severity == "error" else typer.colors.YELLOW
+        typer.secho(f"{issue.severity.upper()}: {issue.message}", fg=color)
+    if not issues:
+        typer.secho(
+            f"OK — profile {profile.name!r} is consistent with its template.",
+            fg=typer.colors.GREEN,
+        )
+    if errors:
+        raise typer.Exit(code=1)
+
+
 @app.command()
 def gui(
     template: Path | None = typer.Option(

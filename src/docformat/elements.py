@@ -124,23 +124,42 @@ def _write_header_footer(doc, raw: dict, tokens: dict) -> None:
 
 def _replace_placeholders(para, replacements: dict, tokens: dict) -> None:
     """Swap template placeholders (e.g. '[Document Title]') for token-expanded
-    values inside existing header/footer runs, keeping the runs' formatting."""
+    values inside existing header/footer/cover runs.
+
+    Works on the run concatenation (NOT para.text, which also includes
+    hyperlink-nested runs) and rewrites only the runs the placeholder spans,
+    so surrounding runs keep their own formatting and hyperlink text is never
+    duplicated."""
+    runs = para.runs
+    if not runs:
+        return
     for placeholder, value in replacements.items():
-        if placeholder not in para.text:
-            continue
         for token, actual in tokens.items():
             value = value.replace(token, actual)
-        replaced = False
-        for run in para.runs:
-            if placeholder in run.text:  # placeholder within a single run
-                run.text = run.text.replace(placeholder, value)
-                replaced = True
-        if not replaced:  # placeholder split across runs: rewrite the first run
-            text = para.text.replace(placeholder, value)
-            for run in para.runs[1:]:
-                run.text = ""
-            if para.runs:
-                para.runs[0].text = text
+        while True:
+            texts = [r.text for r in runs]
+            full = "".join(texts)
+            start = full.find(placeholder)
+            if start == -1:
+                break
+            end = start + len(placeholder)
+            spans = []  # (run index, slice start, slice end) touched by the match
+            pos = 0
+            for i, t in enumerate(texts):
+                if pos + len(t) > start and pos < end:
+                    spans.append((i, max(0, start - pos), min(len(t), end - pos)))
+                pos += len(t)
+            first_i, f_start, f_end = spans[0]
+            if len(spans) == 1:
+                runs[first_i].text = (
+                    texts[first_i][:f_start] + value + texts[first_i][f_end:]
+                )
+            else:
+                runs[first_i].text = texts[first_i][:f_start] + value
+                for i, _, _ in spans[1:-1]:
+                    runs[i].text = ""
+                last_i, _, l_end = spans[-1]
+                runs[last_i].text = texts[last_i][l_end:]
 
 
 def _append_marginal_text(container, text: str, tokens: dict, style, align) -> None:
@@ -194,11 +213,23 @@ def _auto_number_captions(doc, profile) -> None:
         counters[kind] = counters.get(kind, 0) + 1
         sep, rest = m.group(2) or " ", m.group(3)
 
-        for run in list(para.runs):
-            run._element.getparent().remove(run._element)
-        para.add_run(f"{kind} ")
+        # Replace only the TEXT runs; a caption paragraph may also carry
+        # non-text runs (an inline image) that must survive in place.
+        p_el = para._p
+        text_runs = [r for r in para.runs if r._element.find(qn("w:t")) is not None]
+        if not text_runs:
+            continue
+        insert_at = list(p_el).index(text_runs[0]._element)
+        for run in text_runs:
+            p_el.remove(run._element)
+
+        created = [para.add_run(f"{kind} ")._element]
         _add_field_run(para, rf"SEQ {kind} \* ARABIC", placeholder=str(counters[kind]))
-        para.add_run(f"{sep}{rest}" if rest else "")
+        created.append(p_el[-1])
+        created.append(para.add_run(f"{sep}{rest}" if rest else "")._element)
+        for el in reversed(created):
+            p_el.remove(el)
+            p_el.insert(insert_at, el)
 
 
 # --- TOC / List of Figures --------------------------------------------------
@@ -206,7 +237,8 @@ def _auto_number_captions(doc, profile) -> None:
 
 def _insert_front_matter(doc, raw: dict) -> None:
     """Insert TOC and List of Figures after the document title (or at start)."""
-    anchor = _front_matter_anchor(doc)
+    h1_style = raw.get("style_map", {}).get("Heading1", "Heading 1")
+    anchor = _front_matter_anchor(doc, {h1_style, "Heading 1"})
 
     toc = raw.get("toc", {})
     lof = raw.get("list_of_figures", {})
@@ -251,14 +283,19 @@ def _note_unfilled_placeholders(doc, model) -> None:
         )
 
 
-def _front_matter_anchor(doc):
-    """Element after which front matter goes: the poured document's H1 title.
+def _front_matter_anchor(doc, h1_names: set[str]):
+    """Element after which front matter goes: the poured document's H1 title
+    (whatever style name the profile maps it to).
 
-    With a kept cover page the body no longer starts at the draft content, so
-    anchor on the first Heading 1 anywhere; without one, fall back to the start.
+    With a kept cover page but no H1 in the content, fall back to the cover's
+    section-break paragraph so the TOC never lands ABOVE the cover.
     """
     for para in doc.paragraphs:
-        if para.style is not None and para.style.name == "Heading 1":
+        if para.style is not None and para.style.name in h1_names:
+            return para._p
+    for para in doc.paragraphs:  # cover section break, if a cover was kept
+        pPr = para._p.find(qn("w:pPr"))
+        if pPr is not None and pPr.find(qn("w:sectPr")) is not None:
             return para._p
     return None
 

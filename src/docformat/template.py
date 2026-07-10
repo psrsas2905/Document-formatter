@@ -38,17 +38,49 @@ def apply_field_values(profile: TemplateProfile, values: dict[str, str]) -> None
         replace[placeholder] = value
 
 
-def load_profile(path: str | Path) -> TemplateProfile:
-    """Read a YAML profile from disk into a TemplateProfile.
+# Every profile must map these labels (BlockType values the classifier emits).
+REQUIRED_STYLE_KEYS = (
+    "Heading1",
+    "Heading2",
+    "Heading3",
+    "Body",
+    "Caption",
+    "ListItem",
+    "Quote",
+)
 
-    Raises FileNotFoundError if the profile is missing.
+
+def load_profile(path: str | Path) -> TemplateProfile:
+    """Read and validate a YAML profile from disk into a TemplateProfile.
+
+    Raises FileNotFoundError if the profile is missing, ValueError with a
+    human-readable message when it is malformed.
     """
     path = Path(path)
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Profile {path} is not valid YAML: {exc}") from exc
+
+    if not isinstance(data, dict) or not data:
+        raise ValueError(f"Profile {path} is empty or not a YAML mapping.")
+    if not data.get("template_file"):
+        raise ValueError(
+            f"Profile {path} is missing 'template_file' — the path to the "
+            "organization's .docx/.dotx template."
+        )
+    style_map = data.get("style_map", {})
+    missing = [k for k in REQUIRED_STYLE_KEYS if not style_map.get(k)]
+    if missing:
+        raise ValueError(
+            f"Profile {path} style_map is missing mappings for: "
+            f"{', '.join(missing)}. Every label needs a template style name."
+        )
+
     data["_profile_path"] = str(path.resolve())  # lets apply.py resolve template_file
     return TemplateProfile(
         name=data.get("name", "Unnamed"),
         template_file=data["template_file"],
-        style_map=data.get("style_map", {}),
+        style_map=style_map,
         raw=data,
     )

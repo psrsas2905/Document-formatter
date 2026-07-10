@@ -267,3 +267,38 @@ def test_txt_cp1252_fallback(tmp_path):
     out = ensure_docx(src, tmp_path / "conv")
     text = docx.Document(str(out)).paragraphs[0].text
     assert "“quotes”" in text and "–" in text
+
+
+def test_profile_validation(tmp_path):
+    import pytest
+
+    from docformat.template import load_profile
+
+    empty = tmp_path / "empty.yaml"
+    empty.write_text("")
+    with pytest.raises(ValueError, match="empty or not a YAML mapping"):
+        load_profile(empty)
+
+    no_template = tmp_path / "no_template.yaml"
+    no_template.write_text("name: x\nstyle_map: {Heading1: 'Heading 1'}\n")
+    with pytest.raises(ValueError, match="missing 'template_file'"):
+        load_profile(no_template)
+
+    partial = tmp_path / "partial.yaml"
+    partial.write_text("template_file: t.docx\nstyle_map: {Heading1: 'Heading 1'}\n")
+    with pytest.raises(ValueError, match="Body"):
+        load_profile(partial)
+
+
+def test_placeholder_split_across_runs(tmp_path):
+    import docx
+
+    from docformat.elements import _replace_placeholders
+
+    doc = docx.Document()
+    p = doc.add_paragraph()
+    p.add_run("Prefix [Docu").bold = True
+    p.add_run("ment Title] suffix")
+    _replace_placeholders(p, {"[Document Title]": "{doc_title}"}, {"{doc_title}": "REAL"})
+    assert p.text == "Prefix REAL suffix"
+    assert p.runs[0].text == "Prefix REAL" and p.runs[0].font.bold  # formatting kept
